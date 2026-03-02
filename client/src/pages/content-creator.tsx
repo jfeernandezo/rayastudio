@@ -263,6 +263,86 @@ export default function ContentCreator() {
     }
   };
 
+  const handleGenerateComplete = async () => {
+    setGeneratingCaption(true);
+    try {
+      const template = selectedTemplateObj;
+      const knowledgeContext = knowledge.map(k => `${k.title}: ${k.content}`).join("\n");
+      const isCarousel = (form.format === "carrossel") || (template?.format === "carrossel");
+      const slideCount = templateSlideCount;
+      const captionRes = await fetch("/api/ai/caption", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectContext: `${project?.name}. ${project?.instructions || ""}. ${project?.description || ""}`,
+          platform: form.platform,
+          format: form.format,
+          template: template?.captionTemplate,
+          topic: aiTopic || form.title,
+          tone: aiTone,
+          knowledgeContext,
+          provider: aiProvider,
+          model: aiModel,
+          ...(isCarousel && slideCount ? { carouselSlides: slideCount } : {}),
+        }),
+      });
+      const captionData = await captionRes.json();
+      if (captionData.caption) updateField("caption", captionData.caption);
+      if (captionData.hashtags) updateField("hashtags", captionData.hashtags);
+      if (captionData.imagePrompt && !form.imagePrompt) updateField("imagePrompt", captionData.imagePrompt);
+
+      const imagePromptToUse = form.imagePrompt || captionData.imagePrompt;
+      setGeneratingCaption(false);
+
+      if (imagePromptToUse) {
+        setGeneratingImage(true);
+        try {
+          const designAgent = selectedDesignAgentObj;
+          const imageRes = await fetch("/api/ai/image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: imagePromptToUse,
+              platform: form.platform,
+              format: form.format,
+              brandColors: (project as any)?.brandColors,
+              designBrief: (project as any)?.designBrief,
+              provider: imgProvider,
+              model: imgModel,
+              designAgent: designAgent ? {
+                visualMood: designAgent.visualMood,
+                colorApproach: designAgent.colorApproach,
+                typographyStyle: designAgent.typographyStyle,
+                layoutPreferences: designAgent.layoutPreferences,
+                graphicElements: designAgent.graphicElements,
+                extractedVisualStyle: designAgent.extractedVisualStyle,
+                restrictions: designAgent.restrictions,
+                referencePersonas: designAgent.referencePersonas,
+              } : null,
+            }),
+          });
+          const imageData = await imageRes.json();
+          if (imageData.b64_json) {
+            const mime = imageData.mimeType || "image/png";
+            updateField("imageUrl", `data:${mime};base64,${imageData.b64_json}`);
+            toast({ title: "Publicação gerada!", description: "Legenda e imagem criadas com sucesso." });
+          } else if (imageData.error) {
+            toast({ title: "Legenda gerada", description: `Imagem falhou: ${imageData.error}`, variant: "destructive" });
+          }
+        } catch {
+          toast({ title: "Legenda gerada", description: "Erro ao gerar imagem — tente na aba Imagem.", variant: "destructive" });
+        } finally {
+          setGeneratingImage(false);
+        }
+      } else {
+        toast({ title: "Legenda gerada!", description: "A IA não retornou prompt de imagem — adicione um manualmente se necessário." });
+      }
+    } catch (e) {
+      toast({ title: "Erro ao gerar publicação", variant: "destructive" });
+      setGeneratingCaption(false);
+    }
+  };
+
   const applyPrompt = (prompt: Prompt) => {
     setAiTopic(prev => prev ? `${prev}\n${prompt.content}` : prompt.content);
     toast({ title: `Prompt "${prompt.name}" aplicado` });
@@ -543,9 +623,40 @@ export default function ContentCreator() {
                 </div>
               )}
 
-              <Button onClick={handleGenerateCaption} disabled={generatingCaption} size="sm" className="w-full" data-testid="button-generate-caption">
-                {generatingCaption ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando legenda...</> : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Legenda</>}
+              {/* Primary: Generate complete publication */}
+              <Button
+                onClick={handleGenerateComplete}
+                disabled={generatingCaption || generatingImage}
+                size="sm"
+                className="w-full"
+                data-testid="button-generate-complete"
+              >
+                {generatingCaption
+                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Gerando legenda...</>
+                  : generatingImage
+                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Gerando imagem...</>
+                  : <><Zap className="w-4 h-4 mr-1.5" /> Gerar Publicação Completa</>
+                }
               </Button>
+
+              {/* Secondary: individual controls */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center"><span className="bg-background px-2 text-xs text-muted-foreground">ou gerar separadamente</span></div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={handleGenerateCaption} disabled={generatingCaption || generatingImage} size="sm" variant="outline" data-testid="button-generate-caption">
+                  {generatingCaption ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Gerando...</> : <><Sparkles className="w-3 h-3 mr-1" /> Só legenda</>}
+                </Button>
+                <Button onClick={() => {
+                  const imagePromptToUse = form.imagePrompt;
+                  if (!imagePromptToUse) { toast({ title: "Preencha o prompt de imagem", variant: "destructive" }); return; }
+                  handleGenerateImage();
+                }} disabled={generatingCaption || generatingImage || !form.imagePrompt} size="sm" variant="outline" data-testid="button-generate-image-only">
+                  {generatingImage ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Gerando...</> : <><Wand2 className="w-3 h-3 mr-1" /> Só imagem</>}
+                </Button>
+              </div>
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
