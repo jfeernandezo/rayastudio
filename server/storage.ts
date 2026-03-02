@@ -1,7 +1,7 @@
 import { eq, desc, and } from "drizzle-orm";
 import { db } from "./db";
 import {
-  users, projects, contentPieces, templates, knowledgeBase, prompts, conversations, messages, projectFonts,
+  users, projects, contentPieces, templates, knowledgeBase, prompts, conversations, messages, projectFonts, appSettings,
   type User, type InsertUser,
   type Project, type InsertProject,
   type ContentPiece, type InsertContentPiece,
@@ -58,6 +58,10 @@ export interface IStorage {
   deleteConversation(id: number): Promise<void>;
   getMessages(conversationId: number): Promise<Message[]>;
   createMessage(conversationId: number, role: string, content: string): Promise<Message>;
+
+  getSettings(): Promise<Record<string, string>>;
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string | null): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -212,6 +216,25 @@ export class DatabaseStorage implements IStorage {
   async createMessage(conversationId: number, role: string, content: string) {
     const [m] = await db.insert(messages).values({ conversationId, role, content }).returning();
     return m;
+  }
+
+  async getSettings(): Promise<Record<string, string>> {
+    const rows = await db.select().from(appSettings);
+    return Object.fromEntries(rows.map(r => [r.key, r.value ?? ""]));
+  }
+  async getSetting(key: string): Promise<string | null> {
+    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return row?.value ?? null;
+  }
+  async setSetting(key: string, value: string | null): Promise<void> {
+    if (value === null || value === "") {
+      await db.delete(appSettings).where(eq(appSettings.key, key));
+    } else {
+      await db.insert(appSettings).values({ key, value }).onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value, updatedAt: new Date() },
+      });
+    }
   }
 }
 
