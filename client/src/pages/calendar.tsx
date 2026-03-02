@@ -11,8 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, Sparkles, Loader2, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
-import type { ContentPiece, Project } from "@shared/schema";
+import { CalendarDays, Sparkles, Loader2, ChevronLeft, ChevronRight, BookOpen, Bot } from "lucide-react";
+import type { ContentPiece, Project, AgentProfile } from "@shared/schema";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -65,6 +65,7 @@ export default function Calendar() {
 
   const [aiForm, setAiForm] = useState({
     projectId: "",
+    agentProfileId: "",
     quinzena: "primeira" as "primeira" | "segunda",
     calendarMonth: new Date(),
     platforms: ["instagram", "linkedin"],
@@ -77,6 +78,7 @@ export default function Calendar() {
 
   const { data: content = [], isLoading } = useQuery<ContentPiece[]>({ queryKey: ["/api/content"] });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+  const { data: agentProfiles = [] } = useQuery<AgentProfile[]>({ queryKey: ["/api/agent-profiles"] });
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -97,6 +99,10 @@ export default function Calendar() {
     try {
       const project = projects.find(p => p.id === Number(aiForm.projectId));
       const period = buildPeriod(aiForm.quinzena, aiForm.calendarMonth);
+
+      const selectedAgent = (aiForm.agentProfileId && aiForm.agentProfileId !== "none")
+        ? agentProfiles.find(a => a.id === Number(aiForm.agentProfileId))
+        : undefined;
 
       const res = await fetch("/api/ai/calendar", {
         method: "POST",
@@ -120,6 +126,7 @@ export default function Calendar() {
           postsPerWeek: aiForm.postsPerWeek,
           topics: aiForm.topics,
           instructions: aiForm.instructions,
+          agentProfile: selectedAgent || null,
         }),
       });
       const data = await res.json();
@@ -313,6 +320,44 @@ export default function Calendar() {
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Agente de Social Media</Label>
+              <Select value={aiForm.agentProfileId} onValueChange={(v) => setAiForm(prev => ({ ...prev, agentProfileId: v }))}>
+                <SelectTrigger data-testid="select-calendar-agent">
+                  <SelectValue placeholder="Sem agente (padrão)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem agente — usar configuração padrão</SelectItem>
+                  {agentProfiles.map(a => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.name}{a.description ? ` — ${a.description}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {aiForm.agentProfileId && aiForm.agentProfileId !== "none" && (() => {
+                const agent = agentProfiles.find(a => a.id === Number(aiForm.agentProfileId));
+                return agent ? (
+                  <div className="flex items-start gap-2 text-xs bg-primary/5 border border-primary/20 rounded-md px-2 py-1.5">
+                    <Bot className="w-3 h-3 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-medium text-primary">{agent.name}</span>
+                      {agent.referencePersonas && <span className="text-muted-foreground"> · Ref: {agent.referencePersonas}</span>}
+                      {(agent.toneCharacteristics as string[])?.length > 0 && (
+                        <p className="text-muted-foreground mt-0.5">{(agent.toneCharacteristics as string[]).slice(0, 3).join(", ")}{(agent.toneCharacteristics as string[]).length > 3 ? "..." : ""}</p>
+                      )}
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+              {agentProfiles.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum agente cadastrado.{" "}
+                  <a href="/agents" className="text-primary underline">Criar agente</a>
+                </p>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label>Projeto *</Label>
               <Select value={aiForm.projectId} onValueChange={(v) => setAiForm(prev => ({ ...prev, projectId: v }))}>
