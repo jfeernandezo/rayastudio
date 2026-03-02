@@ -1,0 +1,194 @@
+1. Objetivo principal do design
+“Qual é o principal objetivo deste material de design?”
+
+Chamar atenção e gerar cliques
+
+Reforçar autoridade/branding
+
+Explicar um conceito de forma visual
+
+Destacar uma oferta/promoção
+
+Mostrar prova social (depoimento/case)
+
+Informar algo importante (aviso, comunicado)
+
+2. Tipo de peça a ser criada
+“Que tipo de peça você precisa?”
+
+Post estático feed (Instagram/LinkedIn)
+
+Carrossel (Instagram/LinkedIn)
+
+Thumb para vídeo/Reels/Shorts
+
+Story criativo (sequência)
+
+Banner para site/landing page
+
+Criativo de tráfego pago (anúncio)
+
+3. Nível de aderência à identidade atual
+“Quanto o design deve seguir a identidade visual atual?”
+
+Seguir 100% o manual/identidade já existente
+
+Seguir parcialmente, com alguma liberdade criativa
+
+Explorar algo novo, mas mantendo o “espírito” da marca
+
+Explorar um visual completamente novo/teste (experimental)
+
+4. Clima/mood visual desejado
+“Qual é o mood principal que o design deve transmitir?”
+
+Minimalista e clean
+
+Moderno e tecnológico
+
+Sofisticado/premium
+
+Divertido e leve
+
+Sério e profissional
+
+Jovem e descolado
+
+Acolhedor/humano
+
+5. Preferência de paleta de cores
+“Como devem ser trabalhadas as cores?”
+
+Usar apenas as cores oficiais da marca
+
+Priorizar cores da marca com alguns toques complementares
+
+Cores mais vibrantes e chamativas
+
+Cores mais sóbrias/neutras
+
+Fundo claro predominante
+
+Fundo escuro predominante
+
+6. Preferência de tipografia
+“Qual a orientação em relação às fontes/tipografia?”
+
+Usar estritamente as fontes oficiais da marca
+
+Usar fontes parecidas, mantendo o estilo
+
+Permitir novas fontes desde que legíveis
+
+Preferência por fontes mais serifadas (clássicas)
+
+Preferência por fontes sem serifa (modernas)
+
+7. Hierarquia de informação
+“O que deve ter maior destaque visual na peça?”
+
+Headline/título principal
+
+Imagem/foto/ilustração
+
+Benefício/resultado prometido
+
+Prova social (número, depoimento)
+
+Call to action (botão/chamada)
+
+Logo/marca
+
+8. Tipo de imagem desejada
+“Que tipo de imagem/visual deve ser priorizado?”
+
+Fotografias reais de pessoas
+
+Fotografias de produto/ambiente
+
+Ilustrações flat/vetoriais
+
+Ilustrações mais complexas/3D
+
+Ícones/pictogramas simples
+
+Gráficos e elementos mais “data driven”
+
+9. Complexidade do layout
+“Quão detalhado o layout deve ser?”
+
+Ultra minimalista (poucos elementos, muito respiro)
+
+Equilibrado (informação bem distribuída, mas sem poluição)
+
+Rico em elementos gráficos (formas, texturas, detalhes)
+
+Estilo “editorial” (como revista/apresentação)
+
+10. Referência de estilo
+“Que tipo de referência de estilo melhor representa o que você busca?”
+
+Similar aos posts atuais do próprio perfil
+
+Similar a perfis de referência (ex.: X, Y, Z)
+
+Tendências atuais de design do nicho
+
+Clássico, atemporal (pouco modinha)
+
+Visual ousado/diferentão dentro do nicho
+
+11. Nível de prioridade para acessibilidade/legibilidade
+“Quão importante é a legibilidade e acessibilidade visual?”
+
+Máxima (tamanho grande de fonte, alto contraste, poucos textos)
+
+Alta, mas com espaço para algumas variações criativas
+
+Moderada (ok sacrificar um pouco de legibilidade por estética)
+
+12. Espaços obrigatórios
+“Existem elementos obrigatórios que sempre devem aparecer?”
+
+Logo da marca em posição fixa
+
+Selo, carimbo ou assinatura visual
+
+Rodapé com contatos/site
+
+Marca d’água discreta
+
+Não há elementos obrigatórios fixos
+
+13. Restrições visuais
+“Há algo que o design NÃO deve ter?”
+
+Não usar fotos de banco de imagem padrão
+
+Não usar degradês muito fortes
+
+Não usar ilustrações “infantis/demais”
+
+Não usar muitas cores ao mesmo tempo
+
+Não usar bordas/contornos pesados
+
+Nenhuma restrição relevante
+
+14. Nível de urgência x refinamento
+“Qual o equilíbrio ideal entre velocidade e refinamento do design?”
+
+Ultra rápido, mesmo que menos refinado (peça tática/pontual)
+
+Equilíbrio entre qualidade e velocidade
+
+Máximo refinamento, mesmo que leve mais tempo (peça estratégica/chave)
+
+15. Variações esperadas
+“Quantas variações do design são necessárias?”
+
+Apenas 1 versão final
+
+2 variações de layout (A/B)
+
+3+ variações para testes (campanha de tráfego/teste criativo)
