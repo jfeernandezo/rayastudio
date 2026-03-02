@@ -91,6 +91,7 @@ export default function ProjectDetail() {
     defaultValues: {
       name: "", description: "", clientName: "", rules: "", instructions: "",
       brandColorDominant: "#6B46C1", brandColorSecondary: "#9F7AEA", brandColorAccent: "#E9D8FD",
+      clickupListId: "", metaInstagramAccountId: "", metaPageId: "",
     },
   });
 
@@ -260,6 +261,9 @@ export default function ProjectDetail() {
       brandColorDominant: palette?.dominant || "#6B46C1",
       brandColorSecondary: palette?.secondary || "#9F7AEA",
       brandColorAccent: palette?.accent || "#E9D8FD",
+      clickupListId: (project as any).clickupListId || "",
+      metaInstagramAccountId: (project as any).metaInstagramAccountId || "",
+      metaPageId: (project as any).metaPageId || "",
     });
     setSettingsOpen(true);
   };
@@ -316,7 +320,21 @@ export default function ProjectDetail() {
               </div>
             )}
           </div>
-          {project.clientName && <p className="text-sm text-muted-foreground">{project.clientName}</p>}
+          {project.clientName && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm text-muted-foreground">{project.clientName}</p>
+              {(project as any).clickupListId && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[#7B68EE]/10 text-[#7B68EE] font-medium" title={`ClickUp List: ${(project as any).clickupListId}`} data-testid="badge-clickup-connected">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#7B68EE]" /> ClickUp
+                </span>
+              )}
+              {(project as any).metaInstagramAccountId && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium" title={`Instagram: ${(project as any).metaInstagramAccountId}`} data-testid="badge-meta-connected">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Meta
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={() => setFontsOpen(true)} data-testid="button-project-fonts">
           <Type className="w-4 h-4 mr-1" /> Fontes
@@ -450,7 +468,7 @@ export default function ProjectDetail() {
       </Dialog>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Configurações do Cliente</DialogTitle></DialogHeader>
           <form onSubmit={projectForm.handleSubmit((d) => updateProjectMutation.mutate(d))} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -549,6 +567,57 @@ export default function ProjectDetail() {
               <Label>Instruções de Tom e Voz</Label>
               <Textarea placeholder="Tom de comunicação, público-alvo..." rows={2} {...projectForm.register("instructions")} />
             </div>
+
+            <div className="space-y-3 pt-1 border-t">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-[#7B68EE]/15 flex items-center justify-center shrink-0">
+                  <div className="w-2 h-2 rounded-sm bg-[#7B68EE]" />
+                </div>
+                <p className="text-xs font-semibold text-foreground">Integrações</p>
+              </div>
+
+              <div className="space-y-3 p-3 rounded-md border bg-muted/20">
+                <div>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">ClickUp</p>
+                  <div className="space-y-1">
+                    <Label className="text-xs">ID da Lista (List ID)</Label>
+                    <Input
+                      placeholder="Ex: 901234567890"
+                      className="font-mono text-xs h-8"
+                      data-testid="input-clickup-list-id"
+                      {...projectForm.register("clickupListId")}
+                    />
+                    <p className="text-[11px] text-muted-foreground">Encontrado na URL da lista no ClickUp: app.clickup.com/t/<strong>LIST_ID</strong>/...</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Meta Business Portfolio</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Instagram Account ID</Label>
+                      <Input
+                        placeholder="Ex: 17841400008460056"
+                        className="font-mono text-xs h-8"
+                        data-testid="input-meta-instagram-id"
+                        {...projectForm.register("metaInstagramAccountId")}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Facebook Page ID</Label>
+                      <Input
+                        placeholder="Ex: 123456789012345"
+                        className="font-mono text-xs h-8"
+                        data-testid="input-meta-page-id"
+                        {...projectForm.register("metaPageId")}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">IDs disponíveis no Meta Business Suite → Configurações da conta</p>
+                </div>
+              </div>
+            </div>
+
             <div className="flex gap-2 justify-end">
               <Button type="button" variant="outline" size="sm" onClick={() => setSettingsOpen(false)}>Cancelar</Button>
               <Button type="submit" size="sm" disabled={updateProjectMutation.isPending}>
