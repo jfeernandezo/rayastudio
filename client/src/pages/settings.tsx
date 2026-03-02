@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle2, XCircle, Eye, EyeOff, Save, Trash2, ExternalLink, AlertCircle, User, Lock, KeyRound } from "lucide-react";
+import { CheckCircle2, XCircle, Eye, EyeOff, Save, Trash2, ExternalLink, AlertCircle, KeyRound } from "lucide-react";
 
 type SettingsData = {
   settings: Record<string, string>;
@@ -25,6 +25,8 @@ const KEYS = {
   metaPortfolioId: "meta_business_portfolio_id",
 };
 
+type Tab = "geral" | "integracoes";
+
 function ConnectionBadge({ connected }: { connected: boolean }) {
   return connected ? (
     <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
@@ -37,497 +39,446 @@ function ConnectionBadge({ connected }: { connected: boolean }) {
   );
 }
 
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border bg-card shadow-sm p-5 space-y-4">
-      {children}
-    </div>
-  );
-}
-
-function SectionHeader({ icon, title, subtitle, badge }: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  badge?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 bg-muted/30">
-          {icon}
-        </div>
-        <div>
-          <p className="font-semibold text-sm text-foreground">{title}</p>
-          {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
-        </div>
-      </div>
-      {badge && <div className="pt-0.5">{badge}</div>}
-    </div>
-  );
-}
-
 export default function Settings() {
   const { toast } = useToast();
+  const [tab, setTab] = useState<Tab>("geral");
+
+  const [accountDrafts, setAccountDrafts] = useState({ name: "", email: "" });
+  const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
+  const [showPass, setShowPass] = useState({ current: false, new: false, confirm: false });
+
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [accountDrafts, setAccountDrafts] = useState({ name: "", email: "" });
-  const [passwordForm, setPasswordForm] = useState({ current: "", new: "", confirm: "" });
-  const [showPasswords, setShowPasswords] = useState({ current: false, new: false, confirm: false });
 
-  const { data, isLoading } = useQuery<SettingsData>({
+  const { data: settings, isLoading: loadingSettings } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
   });
-
   const { data: account, isLoading: loadingAccount } = useQuery<AccountData>({
     queryKey: ["/api/account"],
   });
 
-  const saveSettingsMutation = useMutation({
-    mutationFn: (updates: Record<string, string | null>) =>
-      apiRequest("PATCH", "/api/settings", updates),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({ title: "Configurações salvas" });
-    },
-    onError: () => toast({ title: "Erro ao salvar", variant: "destructive" }),
-  });
-
   const saveAccountMutation = useMutation({
-    mutationFn: (updates: { name?: string; email?: string }) =>
-      apiRequest("PATCH", "/api/account", updates),
+    mutationFn: (u: { name?: string; email?: string }) => apiRequest("PATCH", "/api/account", u),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/account"] });
-      toast({ title: "Conta atualizada" });
       setAccountDrafts({ name: "", email: "" });
+      toast({ title: "Conta atualizada" });
     },
     onError: () => toast({ title: "Erro ao atualizar conta", variant: "destructive" }),
   });
 
   const changePasswordMutation = useMutation({
-    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
-      apiRequest("POST", "/api/account/change-password", data),
+    mutationFn: (d: { currentPassword: string; newPassword: string }) =>
+      apiRequest("POST", "/api/account/change-password", d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/account"] });
-      toast({ title: "Senha alterada com sucesso" });
       setPasswordForm({ current: "", new: "", confirm: "" });
+      toast({ title: "Senha alterada com sucesso" });
     },
     onError: async (err: any) => {
-      const body = err?.response ? await err.response.json().catch(() => ({})) : {};
+      const body = await err?.response?.json().catch(() => ({})) ?? {};
       toast({ title: body.error || "Erro ao alterar senha", variant: "destructive" });
     },
   });
 
-  const deleteSettingMutation = useMutation({
+  const saveSettingsMutation = useMutation({
+    mutationFn: (u: Record<string, string | null>) => apiRequest("PATCH", "/api/settings", u),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Salvo" });
+    },
+    onError: () => toast({ title: "Erro ao salvar", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
     mutationFn: (key: string) => apiRequest("DELETE", `/api/settings/${key}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({ title: "Credencial removida" });
+      toast({ title: "Removido" });
     },
   });
-
-  const startEdit = (key: string) => {
-    setEditing(prev => ({ ...prev, [key]: true }));
-    setDrafts(prev => ({ ...prev, [key]: "" }));
-  };
-
-  const cancelEdit = (key: string) => {
-    setEditing(prev => ({ ...prev, [key]: false }));
-  };
 
   const saveField = (key: string) => {
     const val = drafts[key]?.trim();
     if (!val) return;
     saveSettingsMutation.mutate({ [key]: val }, {
       onSuccess: () => {
-        setEditing(prev => ({ ...prev, [key]: false }));
-        setDrafts(prev => ({ ...prev, [key]: "" }));
+        setEditing(p => ({ ...p, [key]: false }));
+        setDrafts(p => ({ ...p, [key]: "" }));
       },
     });
   };
 
-  const handlePasswordChange = () => {
-    if (!passwordForm.new || passwordForm.new.length < 6) {
-      toast({ title: "A nova senha deve ter pelo menos 6 caracteres", variant: "destructive" });
+  const handlePasswordSubmit = () => {
+    if (passwordForm.new.length < 6) {
+      toast({ title: "A senha deve ter pelo menos 6 caracteres", variant: "destructive" });
       return;
     }
     if (passwordForm.new !== passwordForm.confirm) {
       toast({ title: "As senhas não coincidem", variant: "destructive" });
       return;
     }
-    changePasswordMutation.mutate({
-      currentPassword: passwordForm.current,
-      newPassword: passwordForm.new,
-    });
+    changePasswordMutation.mutate({ currentPassword: passwordForm.current, newPassword: passwordForm.new });
   };
 
-  if (isLoading || loadingAccount) {
-    return (
-      <div className="p-6 max-w-2xl mx-auto space-y-4">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-40 w-full rounded-xl" />
-        <Skeleton className="h-48 w-full rounded-xl" />
-        <Skeleton className="h-36 w-full rounded-xl" />
-      </div>
-    );
-  }
+  const isLoading = loadingSettings || loadingAccount;
+  const c = settings?.connected ?? {};
+  const s = settings?.settings ?? {};
 
-  const c = data?.connected ?? {};
-  const s = data?.settings ?? {};
-  const isClickupConnected = c[KEYS.clickupToken];
-  const isMetaConnected = c[KEYS.metaSystemToken];
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "geral", label: "Geral" },
+    { key: "integracoes", label: "Integrações" },
+  ];
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-5">
-      <div>
+    <div className="p-6 max-w-2xl mx-auto">
+      <div className="mb-5">
         <h1 className="text-xl font-semibold tracking-tight">Configurações</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Gerencie sua conta e as integrações da agência.
-        </p>
+        <p className="text-sm text-muted-foreground mt-0.5">Gerencie sua conta e integrações da agência.</p>
       </div>
 
-      {/* === CONTA === */}
-      <SectionCard>
-        <SectionHeader
-          icon={<User className="w-4 h-4 text-muted-foreground" />}
-          title="Conta"
-          subtitle="Informações do dono da agência"
-        />
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Nome</Label>
-            <Input
-              placeholder={account?.name || "Seu nome"}
-              value={accountDrafts.name}
-              onChange={e => setAccountDrafts(prev => ({ ...prev, name: e.target.value }))}
-              className="h-9 text-sm"
-              data-testid="input-account-name"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Email</Label>
-            <Input
-              type="email"
-              placeholder={account?.email || "seu@email.com"}
-              value={accountDrafts.email}
-              onChange={e => setAccountDrafts(prev => ({ ...prev, email: e.target.value }))}
-              className="h-9 text-sm"
-              data-testid="input-account-email"
-            />
-          </div>
-        </div>
-
-        {(account?.name || account?.email) && (
-          <div className="flex gap-2 text-xs text-muted-foreground pt-0.5">
-            {account.name && <span className="font-medium text-foreground">{account.name}</span>}
-            {account.name && account.email && <span>·</span>}
-            {account.email && <span>{account.email}</span>}
-          </div>
-        )}
-
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            onClick={() => saveAccountMutation.mutate({
-              name: accountDrafts.name || undefined,
-              email: accountDrafts.email || undefined,
-            })}
-            disabled={saveAccountMutation.isPending || (!accountDrafts.name.trim() && !accountDrafts.email.trim())}
-            data-testid="button-save-account"
-          >
-            <Save className="w-3.5 h-3.5 mr-1.5" />
-            {saveAccountMutation.isPending ? "Salvando..." : "Salvar"}
-          </Button>
-        </div>
-      </SectionCard>
-
-      {/* === SENHA === */}
-      <SectionCard>
-        <SectionHeader
-          icon={<Lock className="w-4 h-4 text-muted-foreground" />}
-          title="Senha"
-          subtitle={account?.hasPassword ? "Senha configurada" : "Nenhuma senha definida ainda"}
-          badge={account?.hasPassword
-            ? <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><CheckCircle2 className="w-3.5 h-3.5" /> Definida</span>
-            : undefined
-          }
-        />
-
-        <div className="space-y-3">
-          {account?.hasPassword && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Senha atual</Label>
-              <div className="relative">
-                <Input
-                  type={showPasswords.current ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={passwordForm.current}
-                  onChange={e => setPasswordForm(prev => ({ ...prev, current: e.target.value }))}
-                  className="h-9 text-sm pr-9"
-                  data-testid="input-current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPasswords.current ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">{account?.hasPassword ? "Nova senha" : "Definir senha"}</Label>
-              <div className="relative">
-                <Input
-                  type={showPasswords.new ? "text" : "password"}
-                  placeholder="Mínimo 6 caracteres"
-                  value={passwordForm.new}
-                  onChange={e => setPasswordForm(prev => ({ ...prev, new: e.target.value }))}
-                  className="h-9 text-sm pr-9"
-                  data-testid="input-new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPasswords.new ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Confirmar senha</Label>
-              <div className="relative">
-                <Input
-                  type={showPasswords.confirm ? "text" : "password"}
-                  placeholder="Repita a senha"
-                  value={passwordForm.confirm}
-                  onChange={e => setPasswordForm(prev => ({ ...prev, confirm: e.target.value }))}
-                  className="h-9 text-sm pr-9"
-                  data-testid="input-confirm-password"
-                  onKeyDown={e => { if (e.key === "Enter") handlePasswordChange(); }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPasswords.confirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {passwordForm.new && passwordForm.confirm && passwordForm.new !== passwordForm.confirm && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <AlertCircle className="w-3.5 h-3.5" /> As senhas não coincidem
-            </p>
-          )}
-
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              onClick={handlePasswordChange}
-              disabled={changePasswordMutation.isPending || !passwordForm.new || !passwordForm.confirm}
-              data-testid="button-change-password"
+      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex border-b border-border bg-muted/20">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              data-testid={`tab-${t.key}`}
+              className={`px-5 py-3 text-sm font-medium transition-all relative ${
+                tab === t.key
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
-              <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-              {changePasswordMutation.isPending ? "Alterando..." : account?.hasPassword ? "Alterar senha" : "Definir senha"}
-            </Button>
-          </div>
+              {t.label}
+              {tab === t.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full" />
+              )}
+            </button>
+          ))}
         </div>
-      </SectionCard>
 
-      {/* === CLICKUP === */}
-      <SectionCard>
-        <SectionHeader
-          icon={<div className="w-4 h-4 rounded-sm bg-[#7B68EE]" />}
-          title="ClickUp"
-          subtitle="Token de API para criar e mover tarefas"
-          badge={<ConnectionBadge connected={!!isClickupConnected} />}
-        />
+        {/* Content */}
+        <div className="p-6">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-3/4" />
+            </div>
+          ) : tab === "geral" ? (
+            <div className="space-y-7">
 
-        <a
-          href="https://app.clickup.com/settings/apps"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-        >
-          Obter token em ClickUp → Configurações → Apps <ExternalLink className="w-3 h-3" />
-        </a>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs font-medium">API Token pessoal</Label>
-          {isClickupConnected && !editing[KEYS.clickupToken] ? (
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center justify-between px-3 h-9 rounded-lg border bg-muted/30 font-mono text-xs text-muted-foreground">
-                <span>{s[KEYS.clickupToken]}</span>
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              {/* Nome e Email */}
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-3">Informações da conta</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Nome</Label>
+                      <Input
+                        placeholder={account?.name || "Seu nome"}
+                        value={accountDrafts.name}
+                        onChange={e => setAccountDrafts(p => ({ ...p, name: e.target.value }))}
+                        className="h-9"
+                        data-testid="input-account-name"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Email</Label>
+                      <Input
+                        type="email"
+                        placeholder={account?.email || "seu@email.com"}
+                        value={accountDrafts.email}
+                        onChange={e => setAccountDrafts(p => ({ ...p, email: e.target.value }))}
+                        className="h-9"
+                        data-testid="input-account-email"
+                      />
+                    </div>
+                  </div>
+                  {(account?.name || account?.email) && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Atual: <span className="text-foreground font-medium">{[account.name, account.email].filter(Boolean).join(" · ")}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() => saveAccountMutation.mutate({
+                      name: accountDrafts.name || undefined,
+                      email: accountDrafts.email || undefined,
+                    })}
+                    disabled={saveAccountMutation.isPending || (!accountDrafts.name.trim() && !accountDrafts.email.trim())}
+                    data-testid="button-save-account"
+                  >
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                    {saveAccountMutation.isPending ? "Salvando..." : "Salvar"}
+                  </Button>
+                </div>
               </div>
-              <Button size="sm" variant="outline" onClick={() => startEdit(KEYS.clickupToken)} data-testid="button-edit-clickup-token">
-                Editar
-              </Button>
-              <Button size="icon" variant="ghost" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => deleteSettingMutation.mutate(KEYS.clickupToken)} data-testid="button-remove-clickup-token">
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
+
+              <div className="border-t border-border" />
+
+              {/* Senha */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">Senha</p>
+                  {account?.hasPassword && (
+                    <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Definida
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {account?.hasPassword && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Senha atual</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPass.current ? "text" : "password"}
+                          placeholder="••••••••"
+                          value={passwordForm.current}
+                          onChange={e => setPasswordForm(p => ({ ...p, current: e.target.value }))}
+                          className="h-9 pr-9"
+                          data-testid="input-current-password"
+                        />
+                        <button type="button" onClick={() => setShowPass(p => ({ ...p, current: !p.current }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showPass.current ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">{account?.hasPassword ? "Nova senha" : "Definir senha"}</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPass.new ? "text" : "password"}
+                          placeholder="Mínimo 6 caracteres"
+                          value={passwordForm.new}
+                          onChange={e => setPasswordForm(p => ({ ...p, new: e.target.value }))}
+                          className="h-9 pr-9"
+                          data-testid="input-new-password"
+                        />
+                        <button type="button" onClick={() => setShowPass(p => ({ ...p, new: !p.new }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showPass.new ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Confirmar senha</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPass.confirm ? "text" : "password"}
+                          placeholder="Repita a senha"
+                          value={passwordForm.confirm}
+                          onChange={e => setPasswordForm(p => ({ ...p, confirm: e.target.value }))}
+                          className="h-9 pr-9"
+                          data-testid="input-confirm-password"
+                          onKeyDown={e => { if (e.key === "Enter") handlePasswordSubmit(); }}
+                        />
+                        <button type="button" onClick={() => setShowPass(p => ({ ...p, confirm: !p.confirm }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showPass.confirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {passwordForm.new && passwordForm.confirm && passwordForm.new !== passwordForm.confirm && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> As senhas não coincidem
+                    </p>
+                  )}
+
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={handlePasswordSubmit}
+                      disabled={changePasswordMutation.isPending || !passwordForm.new || !passwordForm.confirm}
+                      data-testid="button-change-password"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 mr-1.5" />
+                      {changePasswordMutation.isPending ? "Salvando..." : account?.hasPassword ? "Alterar senha" : "Definir senha"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Input
-                  type={showTokens[KEYS.clickupToken] ? "text" : "password"}
-                  placeholder="pk_xxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  value={drafts[KEYS.clickupToken] ?? ""}
-                  onChange={e => setDrafts(prev => ({ ...prev, [KEYS.clickupToken]: e.target.value }))}
-                  className="font-mono text-xs h-9 pr-9"
-                  data-testid="input-clickup-token"
-                  onKeyDown={e => { if (e.key === "Enter") saveField(KEYS.clickupToken); }}
-                />
-                <button type="button" onClick={() => setShowTokens(prev => ({ ...prev, [KEYS.clickupToken]: !prev[KEYS.clickupToken] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showTokens[KEYS.clickupToken] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
+            <div className="space-y-6">
+
+              {/* ClickUp */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-[#7B68EE]/10 flex items-center justify-center shrink-0">
+                      <div className="w-3.5 h-3.5 rounded-sm bg-[#7B68EE]" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">ClickUp</p>
+                      <ConnectionBadge connected={!!c[KEYS.clickupToken]} />
+                    </div>
+                  </div>
+                  <a href="https://app.clickup.com/settings/apps" target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1 transition-colors">
+                    Obter token <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">API Token pessoal</Label>
+                  {c[KEYS.clickupToken] && !editing[KEYS.clickupToken] ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center justify-between px-3 h-9 rounded-lg border bg-muted/30 font-mono text-xs text-muted-foreground">
+                        <span>{s[KEYS.clickupToken]}</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 ml-2" />
+                      </div>
+                      <Button size="sm" variant="outline" className="h-9" onClick={() => setEditing(p => ({ ...p, [KEYS.clickupToken]: true }))} data-testid="button-edit-clickup">Editar</Button>
+                      <Button size="icon" variant="ghost" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate(KEYS.clickupToken)} data-testid="button-remove-clickup"><Trash2 className="w-3.5 h-3.5" /></Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          type={showTokens[KEYS.clickupToken] ? "text" : "password"}
+                          placeholder="pk_xxxxxxxxxxxxxxxxxxxxxxxxxx"
+                          value={drafts[KEYS.clickupToken] ?? ""}
+                          onChange={e => setDrafts(p => ({ ...p, [KEYS.clickupToken]: e.target.value }))}
+                          className="font-mono text-xs h-9 pr-9"
+                          data-testid="input-clickup-token"
+                          onKeyDown={e => { if (e.key === "Enter") saveField(KEYS.clickupToken); }}
+                        />
+                        <button type="button" onClick={() => setShowTokens(p => ({ ...p, [KEYS.clickupToken]: !p[KEYS.clickupToken] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showTokens[KEYS.clickupToken] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <Button size="sm" className="h-9" onClick={() => saveField(KEYS.clickupToken)} disabled={saveSettingsMutation.isPending || !drafts[KEYS.clickupToken]?.trim()} data-testid="button-save-clickup">
+                        <Save className="w-3.5 h-3.5 mr-1" /> Salvar
+                      </Button>
+                      {c[KEYS.clickupToken] && (
+                        <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditing(p => ({ ...p, [KEYS.clickupToken]: false }))}>Cancelar</Button>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">ClickUp → Configurações → Apps → API Token</p>
+                </div>
               </div>
-              <Button size="sm" onClick={() => saveField(KEYS.clickupToken)} disabled={saveSettingsMutation.isPending || !drafts[KEYS.clickupToken]?.trim()} data-testid="button-save-clickup-token">
-                <Save className="w-3.5 h-3.5 mr-1" /> Salvar
-              </Button>
-              {isClickupConnected && (
-                <Button size="sm" variant="ghost" onClick={() => cancelEdit(KEYS.clickupToken)}>Cancelar</Button>
-              )}
+
+              <div className="border-t border-border" />
+
+              {/* Meta */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <div className="w-3.5 h-3.5 rounded bg-gradient-to-br from-blue-500 to-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Meta Business Portfolio</p>
+                      <ConnectionBadge connected={!!c[KEYS.metaSystemToken]} />
+                    </div>
+                  </div>
+                  <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1 transition-colors">
+                    Gerenciar <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 flex gap-2 items-start">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                    Use um <strong>System User Token</strong> (permanente, não expira). Tokens pessoais expiram em 60 dias.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">System User Token</Label>
+                    {c[KEYS.metaSystemToken] && !editing[KEYS.metaSystemToken] ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 flex items-center justify-between px-3 h-9 rounded-lg border bg-muted/30 font-mono text-xs text-muted-foreground">
+                          <span>{s[KEYS.metaSystemToken]}</span>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 ml-2" />
+                        </div>
+                        <Button size="sm" variant="outline" className="h-9" onClick={() => setEditing(p => ({ ...p, [KEYS.metaSystemToken]: true }))}>Editar</Button>
+                        <Button size="icon" variant="ghost" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate(KEYS.metaSystemToken)} data-testid="button-remove-meta-token"><Trash2 className="w-3.5 h-3.5" /></Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <Input
+                            type={showTokens[KEYS.metaSystemToken] ? "text" : "password"}
+                            placeholder="EAAxxxxxxxxxxxxxxxxxx..."
+                            value={drafts[KEYS.metaSystemToken] ?? ""}
+                            onChange={e => setDrafts(p => ({ ...p, [KEYS.metaSystemToken]: e.target.value }))}
+                            className="font-mono text-xs h-9 pr-9"
+                            data-testid="input-meta-token"
+                          />
+                          <button type="button" onClick={() => setShowTokens(p => ({ ...p, [KEYS.metaSystemToken]: !p[KEYS.metaSystemToken] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                            {showTokens[KEYS.metaSystemToken] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                        {c[KEYS.metaSystemToken] && (
+                          <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditing(p => ({ ...p, [KEYS.metaSystemToken]: false }))}>Cancelar</Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">Business Portfolio ID</Label>
+                    {c[KEYS.metaPortfolioId] && !editing[KEYS.metaPortfolioId] ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 flex items-center px-3 h-9 rounded-lg border bg-muted/30 font-mono text-xs text-muted-foreground">{s[KEYS.metaPortfolioId]}</div>
+                        <Button size="sm" variant="outline" className="h-9" onClick={() => setEditing(p => ({ ...p, [KEYS.metaPortfolioId]: true }))}>Editar</Button>
+                        <Button size="icon" variant="ghost" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate(KEYS.metaPortfolioId)} data-testid="button-remove-meta-portfolio"><Trash2 className="w-3.5 h-3.5" /></Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          placeholder="Ex: 123456789012345"
+                          value={drafts[KEYS.metaPortfolioId] ?? ""}
+                          onChange={e => setDrafts(p => ({ ...p, [KEYS.metaPortfolioId]: e.target.value }))}
+                          className="font-mono text-xs h-9 flex-1"
+                          data-testid="input-meta-portfolio-id"
+                        />
+                        {c[KEYS.metaPortfolioId] && (
+                          <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditing(p => ({ ...p, [KEYS.metaPortfolioId]: false }))}>Cancelar</Button>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">Meta Business Suite → Configurações → Informações do negócio</p>
+                  </div>
+
+                  {(!c[KEYS.metaSystemToken] || editing[KEYS.metaSystemToken] || editing[KEYS.metaPortfolioId]) && (
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const u: Record<string, string> = {};
+                          if (drafts[KEYS.metaSystemToken]?.trim()) u[KEYS.metaSystemToken] = drafts[KEYS.metaSystemToken];
+                          if (drafts[KEYS.metaPortfolioId]?.trim()) u[KEYS.metaPortfolioId] = drafts[KEYS.metaPortfolioId];
+                          if (!Object.keys(u).length) return;
+                          saveSettingsMutation.mutate(u, { onSuccess: () => { setEditing({}); setDrafts({}); } });
+                        }}
+                        disabled={saveSettingsMutation.isPending || (!drafts[KEYS.metaSystemToken]?.trim() && !drafts[KEYS.metaPortfolioId]?.trim())}
+                        data-testid="button-save-meta"
+                      >
+                        <Save className="w-3.5 h-3.5 mr-1.5" />
+                        {saveSettingsMutation.isPending ? "Salvando..." : "Salvar credenciais Meta"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           )}
         </div>
-      </SectionCard>
-
-      {/* === META === */}
-      <SectionCard>
-        <SectionHeader
-          icon={<div className="w-4 h-4 rounded bg-gradient-to-br from-blue-500 to-blue-600" />}
-          title="Meta Business Portfolio"
-          subtitle="System User Token para publicação no Instagram e Facebook"
-          badge={<ConnectionBadge connected={!!isMetaConnected} />}
-        />
-
-        <a
-          href="https://business.facebook.com/settings/system-users"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-        >
-          Gerenciar usuários do sistema no Meta Business Suite <ExternalLink className="w-3 h-3" />
-        </a>
-
-        <div className="rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/20 px-3 py-2.5 flex gap-2 items-start">
-          <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-            Use um <strong>System User Token</strong> em vez do token pessoal. Tokens de sistema são permanentes e não expiram (tokens de usuário expiram em 60 dias).
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">System User Token</Label>
-            {isMetaConnected && !editing[KEYS.metaSystemToken] ? (
-              <div className="flex items-center gap-2">
-                <div className="flex-1 flex items-center justify-between px-3 h-9 rounded-lg border bg-muted/30 font-mono text-xs text-muted-foreground">
-                  <span>{s[KEYS.metaSystemToken]}</span>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                </div>
-                <Button size="sm" variant="outline" onClick={() => startEdit(KEYS.metaSystemToken)}>Editar</Button>
-                <Button size="icon" variant="ghost" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => deleteSettingMutation.mutate(KEYS.metaSystemToken)} data-testid="button-remove-meta-token">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    type={showTokens[KEYS.metaSystemToken] ? "text" : "password"}
-                    placeholder="EAAxxxxxxxxxxxxxxxxxx..."
-                    value={drafts[KEYS.metaSystemToken] ?? ""}
-                    onChange={e => setDrafts(prev => ({ ...prev, [KEYS.metaSystemToken]: e.target.value }))}
-                    className="font-mono text-xs h-9 pr-9"
-                    data-testid="input-meta-system-token"
-                  />
-                  <button type="button" onClick={() => setShowTokens(prev => ({ ...prev, [KEYS.metaSystemToken]: !prev[KEYS.metaSystemToken] }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    {showTokens[KEYS.metaSystemToken] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-                {isMetaConnected && (
-                  <Button size="sm" variant="ghost" onClick={() => cancelEdit(KEYS.metaSystemToken)}>Cancelar</Button>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Business Portfolio ID</Label>
-            {c[KEYS.metaPortfolioId] && !editing[KEYS.metaPortfolioId] ? (
-              <div className="flex items-center gap-2">
-                <div className="flex-1 flex items-center px-3 h-9 rounded-lg border bg-muted/30 font-mono text-xs text-muted-foreground">
-                  {s[KEYS.metaPortfolioId]}
-                </div>
-                <Button size="sm" variant="outline" onClick={() => startEdit(KEYS.metaPortfolioId)}>Editar</Button>
-                <Button size="icon" variant="ghost" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => deleteSettingMutation.mutate(KEYS.metaPortfolioId)} data-testid="button-remove-meta-portfolio">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Ex: 123456789012345"
-                  value={drafts[KEYS.metaPortfolioId] ?? ""}
-                  onChange={e => setDrafts(prev => ({ ...prev, [KEYS.metaPortfolioId]: e.target.value }))}
-                  className="font-mono text-xs h-9 flex-1"
-                  data-testid="input-meta-portfolio-id"
-                />
-                {c[KEYS.metaPortfolioId] && (
-                  <Button size="sm" variant="ghost" onClick={() => cancelEdit(KEYS.metaPortfolioId)}>Cancelar</Button>
-                )}
-              </div>
-            )}
-            <p className="text-[11px] text-muted-foreground">Meta Business Suite → Configurações → Informações do negócio</p>
-          </div>
-
-          {(!isMetaConnected || editing[KEYS.metaSystemToken] || editing[KEYS.metaPortfolioId]) && (
-            <div className="flex justify-end pt-1">
-              <Button
-                size="sm"
-                onClick={() => {
-                  const updates: Record<string, string> = {};
-                  if (drafts[KEYS.metaSystemToken]?.trim()) updates[KEYS.metaSystemToken] = drafts[KEYS.metaSystemToken];
-                  if (drafts[KEYS.metaPortfolioId]?.trim()) updates[KEYS.metaPortfolioId] = drafts[KEYS.metaPortfolioId];
-                  if (Object.keys(updates).length === 0) return;
-                  saveSettingsMutation.mutate(updates, {
-                    onSuccess: () => {
-                      setEditing({});
-                      setDrafts({});
-                    },
-                  });
-                }}
-                disabled={saveSettingsMutation.isPending || (!drafts[KEYS.metaSystemToken]?.trim() && !drafts[KEYS.metaPortfolioId]?.trim())}
-                data-testid="button-save-meta"
-              >
-                <Save className="w-3.5 h-3.5 mr-1.5" />
-                {saveSettingsMutation.isPending ? "Salvando..." : "Salvar credenciais Meta"}
-              </Button>
-            </div>
-          )}
-        </div>
-      </SectionCard>
-
-      {/* Info */}
-      <div className="rounded-xl border bg-muted/30 px-4 py-3.5 space-y-2">
-        <p className="text-xs font-semibold">Como as credenciais são usadas?</p>
-        <ul className="text-[11px] text-muted-foreground space-y-1 list-disc list-inside leading-relaxed">
-          <li>O token do ClickUp cria e move tarefas automaticamente nas listas vinculadas a cada projeto</li>
-          <li>O token do Meta publica conteúdo aprovado direto no Instagram e Facebook dos clientes</li>
-          <li>Credenciais ficam armazenadas no servidor — nunca são expostas no frontend</li>
-        </ul>
       </div>
     </div>
   );
