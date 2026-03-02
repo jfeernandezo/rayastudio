@@ -1,4 +1,5 @@
 import { Switch, Route, useLocation } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Bell, AlertCircle } from "lucide-react";
+import { Bell, AlertCircle, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import type { ContentPiece } from "@shared/schema";
 import NotFound from "@/pages/not-found";
@@ -21,6 +22,7 @@ import Calendar from "@/pages/calendar";
 import ApprovePage from "@/pages/approve";
 import Settings from "@/pages/settings";
 import AgentProfiles from "@/pages/agent-profiles";
+import LoginPage from "@/pages/login";
 
 function NotificationBell() {
   const { data: content = [] } = useQuery<ContentPiece[]>({ queryKey: ["/api/content"] });
@@ -73,7 +75,7 @@ function NotificationBell() {
   );
 }
 
-function AppLayout() {
+function AppLayout({ username }: { username: string }) {
   const [location] = useLocation();
   const style = {
     "--sidebar-width": "15rem",
@@ -85,7 +87,7 @@ function AppLayout() {
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full bg-background">
-        <AppSidebar />
+        <AppSidebar username={username} />
         <div className="flex flex-col flex-1 min-w-0">
 
           {/* ── Liquid glass header ── */}
@@ -133,8 +135,41 @@ function AppLayout() {
   );
 }
 
+function AuthGuard() {
+  const [, navigate] = useLocation();
+
+  const { data: user, isLoading } = useQuery<{ id: string; username: string } | null>({
+    queryKey: ["/api/me"],
+    queryFn: async () => {
+      const res = await fetch("/api/me", { credentials: "include" });
+      if (res.status === 401) return null;
+      if (!res.ok) throw new Error("Erro ao verificar autenticação");
+      return res.json();
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      navigate("/login");
+    }
+  }, [isLoading, user]);
+
+  if (isLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return <AppLayout username={user.username} />;
+}
+
 function Router() {
   const [location] = useLocation();
+
   if (location.startsWith("/approve/")) {
     return (
       <Switch>
@@ -142,7 +177,12 @@ function Router() {
       </Switch>
     );
   }
-  return <AppLayout />;
+
+  if (location === "/login") {
+    return <LoginPage />;
+  }
+
+  return <AuthGuard />;
 }
 
 export default function App() {

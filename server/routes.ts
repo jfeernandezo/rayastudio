@@ -10,6 +10,8 @@ import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import express from "express";
+import passport from "passport";
+import { requireAuth, hashPassword, comparePasswords } from "./auth";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -111,6 +113,57 @@ async function generateTextContent({
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
 
   app.use("/uploads/fonts", express.static(FONTS_DIR));
+
+  // ── AUTH ROUTES (public) ──────────────────────────────────────────────────
+
+  app.get("/api/me", (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Não autenticado" });
+    const user = req.user as any;
+    res.json({ id: user.id, username: user.username });
+  });
+
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) return res.status(401).json({ message: info?.message || "Credenciais inválidas" });
+      req.logIn(user, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        res.json({ id: user.id, username: user.username });
+      });
+    })(req, res, next);
+  });
+
+  app.post("/api/auth/logout", (req, res, next) => {
+    req.logout((err) => {
+      if (err) return next(err);
+      res.json({ ok: true });
+    });
+  });
+
+  app.post("/api/auth/change-password", requireAuth, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const user = req.user as any;
+      const dbUser = await storage.getUser(user.id);
+      if (!dbUser) return res.status(404).json({ message: "Usuário não encontrado" });
+      const valid = await comparePasswords(currentPassword, dbUser.password);
+      if (!valid) return res.status(400).json({ message: "Senha atual incorreta" });
+      const hashed = await hashPassword(newPassword);
+      await storage.updateUser(user.id, { password: hashed });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Erro ao alterar senha" });
+    }
+  });
+
+  // ── PROTECT all /api routes (except public approval) ─────────────────────
+  // NOTE: req.path here is relative to "/api" — e.g. "/api/approve/token" → req.path = "/approve/token"
+  app.use("/api", (req, res, next) => {
+    if (req.isAuthenticated()) return next();
+    // Allow public approval endpoints
+    if (req.path.startsWith("/approve")) return next();
+    res.status(401).json({ message: "Não autenticado" });
+  });
 
   // --- PROJECT FONTS ---
   app.get("/api/projects/:id/fonts", async (req, res) => {

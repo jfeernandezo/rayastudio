@@ -1,8 +1,10 @@
 import { useRef, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
+import { useMutation } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import {
   LayoutDashboard, Briefcase, CalendarDays, LayoutTemplate,
-  BrainCircuit, Lightbulb, Library, Settings2, ImagePlus, Sparkles
+  BrainCircuit, Lightbulb, Library, Settings2, Sparkles, LogOut, User
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -23,8 +25,8 @@ const bottomItems = [
   { title: "Configurações", url: "/settings", icon: Settings2 },
 ];
 
-export function AppSidebar() {
-  const [location] = useLocation();
+export function AppSidebar({ username }: { username: string }) {
+  const [location, navigate] = useLocation();
   const [logo, setLogo] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -45,6 +47,16 @@ export function AppSidebar() {
     reader.readAsDataURL(file);
     e.target.value = "";
   };
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    },
+    onSuccess: () => {
+      queryClient.clear();
+      navigate("/login");
+    },
+  });
 
   const isActive = (url: string) =>
     url === "/" ? location === "/" : location.startsWith(url);
@@ -138,6 +150,26 @@ export function AppSidebar() {
             );
           })}
         </SidebarMenu>
+
+        {/* User info + logout */}
+        <div className="mt-2 pt-2 border-t border-border/50">
+          <div className="flex items-center gap-2 px-2">
+            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0">
+              <User className="w-3 h-3 text-muted-foreground" />
+            </div>
+            <span className="text-[12px] text-muted-foreground flex-1 truncate">{username}</span>
+            <button
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-all"
+              title="Sair"
+              data-testid="button-logout"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
         <div className="px-2 pt-2">
           <p className="text-[10px] text-muted-foreground/35">v1.0 · Raya Studio</p>
         </div>

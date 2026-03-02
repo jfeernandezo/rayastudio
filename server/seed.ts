@@ -1,8 +1,23 @@
 import { db } from "./db";
-import { projects, contentPieces, templates, knowledgeBase, prompts } from "@shared/schema";
+import { users, projects, contentPieces, templates, knowledgeBase, prompts } from "@shared/schema";
 import { sql } from "drizzle-orm";
+import { hashPassword } from "./auth";
+import { randomUUID } from "crypto";
 
 export async function seedDatabase() {
+  // Seed admin user if no users exist
+  const existingUsers = await db.select().from(users);
+  if (existingUsers.length === 0) {
+    const hashed = await hashPassword("raya2024");
+    await db.insert(users).values({ id: randomUUID(), username: "admin", password: hashed });
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("  Raya Studio — Primeiro acesso");
+    console.log("  Usuário: admin");
+    console.log("  Senha:   raya2024");
+    console.log("  (Altere em Configurações → Segurança)");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  }
+
   const existingProjects = await db.select().from(projects);
   if (existingProjects.length > 0) return;
 
