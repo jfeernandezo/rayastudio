@@ -130,6 +130,7 @@ export default function ContentCreator() {
           platform: form.platform,
           format: form.format,
           brandColors: (project as any)?.brandColors,
+          designBrief: (project as any)?.designBrief,
         }),
       });
       const data = await res.json();

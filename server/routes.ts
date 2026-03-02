@@ -260,13 +260,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- AI: GENERATE IMAGE ---
   app.post("/api/ai/image", async (req, res) => {
     try {
-      const { prompt, platform, format, brandColors, style } = req.body;
+      const { prompt, platform, format, brandColors, style, designBrief } = req.body;
+
+      const briefLines: string[] = [];
+      if (designBrief) {
+        const b = designBrief as Record<string, any>;
+        if (b.mood) briefLines.push(`Visual mood: ${b.mood}`);
+        if (b.colorPreference) briefLines.push(`Color approach: ${b.colorPreference}`);
+        if (b.imageType) briefLines.push(`Image type: ${b.imageType}`);
+        if (b.layoutComplexity) briefLines.push(`Layout complexity: ${b.layoutComplexity}`);
+        if (b.brandAdherence) briefLines.push(`Brand adherence: ${b.brandAdherence}`);
+        if (b.typographyPreference) briefLines.push(`Typography style: ${b.typographyPreference}`);
+        if (b.infoHierarchy) briefLines.push(`Visual hierarchy focus: ${b.infoHierarchy}`);
+        if (b.accessibility) briefLines.push(`Readability level: ${b.accessibility}`);
+        if (b.visualRestrictions?.length) briefLines.push(`Avoid: ${b.visualRestrictions.join(", ")}`);
+        if (b.styleReference) briefLines.push(`Style reference: ${b.styleReference}`);
+      }
+
+      const briefContext = briefLines.length > 0 ? briefLines.join(". ") + "." : "";
 
       const enhancedPrompt = `${prompt}. 
       ${platform === "instagram" ? "Square or portrait format, highly visual, Instagram-worthy" : "Professional, LinkedIn appropriate, clean and modern"}.
       ${style ? `Style: ${style}` : ""}
-      ${brandColors?.length ? `Use these brand colors: ${brandColors.join(", ")}` : ""}
-      High quality, professional marketing image.`;
+      ${brandColors?.dominant ? `Brand colors — dominant: ${brandColors.dominant}, secondary: ${brandColors.secondary}, accent: ${brandColors.accent}. Apply the 60-30-10 color rule.` : brandColors?.length ? `Use these brand colors: ${brandColors.join(", ")}` : ""}
+      ${briefContext}
+      High quality, professional marketing image for social media.`;
 
       const size = platform === "instagram" && format === "story" ? "1024x1024" : "1024x1024";
 

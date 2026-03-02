@@ -12,9 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ArrowLeft, Trash2, Edit, Settings } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, Settings, FileText, Copy, Check } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { type Project, type ContentPiece } from "@shared/schema";
+import { type Project, type ContentPiece, type DesignBrief } from "@shared/schema";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -37,6 +37,8 @@ export default function ProjectDetail() {
   const [, navigate] = useLocation();
   const [newContentOpen, setNewContentOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [briefCopied, setBriefCopied] = useState(false);
   const { toast } = useToast();
 
   const { data: project, isLoading: loadingProject } = useQuery<Project>({ queryKey: ["/api/projects", id] });
@@ -58,6 +60,13 @@ export default function ProjectDetail() {
       brandColorDominant: "#6B46C1", brandColorSecondary: "#9F7AEA", brandColorAccent: "#E9D8FD",
     },
   });
+
+  const emptyBrief: DesignBrief = {
+    brandAdherence: "", mood: "", colorPreference: "", typographyPreference: "",
+    infoHierarchy: "", imageType: "", layoutComplexity: "", styleReference: "",
+    accessibility: "", mandatoryElements: [], visualRestrictions: [], additionalNotes: "",
+  };
+  const [briefForm, setBriefForm] = useState<DesignBrief>(emptyBrief);
 
   const createContentMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/content", data),
@@ -90,6 +99,70 @@ export default function ProjectDetail() {
       toast({ title: "Projeto atualizado!" });
     },
   });
+
+  const updateDesignBriefMutation = useMutation({
+    mutationFn: (brief: DesignBrief) => apiRequest("PATCH", `/api/projects/${id}`, { designBrief: brief }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id] });
+      toast({ title: "Briefing salvo!" });
+    },
+    onError: () => toast({ title: "Erro ao salvar briefing", variant: "destructive" }),
+  });
+
+  const openBrief = () => {
+    if (!project) return;
+    const existing = (project as any).designBrief as DesignBrief | null;
+    setBriefForm(existing ? { ...emptyBrief, ...existing } : emptyBrief);
+    setBriefOpen(true);
+  };
+
+  const toggleMulti = (field: "mandatoryElements" | "visualRestrictions", value: string) => {
+    setBriefForm(prev => {
+      const current = prev[field] || [];
+      return {
+        ...prev,
+        [field]: current.includes(value) ? current.filter(v => v !== value) : [...current, value],
+      };
+    });
+  };
+
+  const formatBriefAsText = (): string => {
+    if (!project) return "";
+    const b = (project as any).designBrief as DesignBrief | null;
+    if (!b) return "Briefing não preenchido.";
+    const lines = [`BRIEFING DE DESIGN — ${project.clientName || project.name}`, ""];
+    const palette = getBrandColors(project.brandColors);
+    if (palette) {
+      lines.push(`Paleta de Cores (60-30-10):`);
+      lines.push(`  • Dominante (60%): ${palette.dominant}`);
+      lines.push(`  • Secundária (30%): ${palette.secondary}`);
+      lines.push(`  • Destaque (10%): ${palette.accent}`);
+      lines.push("");
+    }
+    if (b.brandAdherence) lines.push(`Aderência à Identidade: ${b.brandAdherence}`);
+    if (b.mood) lines.push(`Mood/Clima Visual: ${b.mood}`);
+    if (b.colorPreference) lines.push(`Preferência de Cores: ${b.colorPreference}`);
+    if (b.typographyPreference) lines.push(`Tipografia: ${b.typographyPreference}`);
+    if (b.infoHierarchy) lines.push(`Hierarquia Visual: ${b.infoHierarchy}`);
+    if (b.imageType) lines.push(`Tipo de Imagem: ${b.imageType}`);
+    if (b.layoutComplexity) lines.push(`Complexidade do Layout: ${b.layoutComplexity}`);
+    if (b.styleReference) lines.push(`Referência de Estilo: ${b.styleReference}`);
+    if (b.accessibility) lines.push(`Acessibilidade/Legibilidade: ${b.accessibility}`);
+    if (b.mandatoryElements?.length) lines.push(`Elementos Obrigatórios: ${b.mandatoryElements.join(", ")}`);
+    if (b.visualRestrictions?.length) lines.push(`Restrições Visuais: ${b.visualRestrictions.join(", ")}`);
+    if (b.additionalNotes) { lines.push(""); lines.push(`Notas Adicionais: ${b.additionalNotes}`); }
+    if (project.rules) { lines.push(""); lines.push(`Regras de Conteúdo: ${project.rules}`); }
+    if (project.instructions) { lines.push(""); lines.push(`Tom e Instruções: ${project.instructions}`); }
+    return lines.join("\n");
+  };
+
+  const copyBrief = () => {
+    const text = formatBriefAsText();
+    navigator.clipboard.writeText(text).then(() => {
+      setBriefCopied(true);
+      setTimeout(() => setBriefCopied(false), 2000);
+    });
+  };
 
   const openSettings = () => {
     if (!project) return;
@@ -161,6 +234,9 @@ export default function ProjectDetail() {
           </div>
           {project.clientName && <p className="text-sm text-muted-foreground">{project.clientName}</p>}
         </div>
+        <Button variant="outline" size="sm" onClick={openBrief} data-testid="button-design-brief">
+          <FileText className="w-4 h-4 mr-1" /> Briefing
+        </Button>
         <Button variant="outline" size="sm" onClick={openSettings} data-testid="button-project-settings">
           <Settings className="w-4 h-4 mr-1" /> Configurações
         </Button>
@@ -392,6 +468,247 @@ export default function ProjectDetail() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={briefOpen} onOpenChange={setBriefOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <DialogTitle>Briefing de Design</DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Preenchido uma vez por cliente. Alimenta a IA de imagem e o designer automaticamente.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={copyBrief} className="shrink-0" data-testid="button-copy-brief">
+                {briefCopied ? <><Check className="w-3.5 h-3.5 mr-1 text-green-600" /> Copiado</> : <><Copy className="w-3.5 h-3.5 mr-1" /> Copiar para Designer</>}
+              </Button>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b pb-1">Identidade Visual</h3>
+
+              <div className="space-y-1.5">
+                <Label>Aderência à identidade visual</Label>
+                <Select value={briefForm.brandAdherence || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, brandAdherence: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-brand-adherence"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Seguir 100% o manual/identidade existente">Seguir 100% o manual/identidade existente</SelectItem>
+                    <SelectItem value="Seguir parcialmente, com liberdade criativa">Seguir parcialmente, com liberdade criativa</SelectItem>
+                    <SelectItem value="Explorar algo novo mantendo o espírito da marca">Explorar algo novo mantendo o espírito da marca</SelectItem>
+                    <SelectItem value="Visual completamente novo/experimental">Visual completamente novo/experimental</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Clima / Mood visual</Label>
+                <Select value={briefForm.mood || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, mood: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-mood"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Minimalista e clean">Minimalista e clean</SelectItem>
+                    <SelectItem value="Moderno e tecnológico">Moderno e tecnológico</SelectItem>
+                    <SelectItem value="Sofisticado/premium">Sofisticado/premium</SelectItem>
+                    <SelectItem value="Divertido e leve">Divertido e leve</SelectItem>
+                    <SelectItem value="Sério e profissional">Sério e profissional</SelectItem>
+                    <SelectItem value="Jovem e descolado">Jovem e descolado</SelectItem>
+                    <SelectItem value="Acolhedor/humano">Acolhedor/humano</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Preferência de paleta de cores</Label>
+                <Select value={briefForm.colorPreference || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, colorPreference: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-colors"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Usar apenas as cores oficiais da marca">Usar apenas as cores oficiais da marca</SelectItem>
+                    <SelectItem value="Cores da marca com alguns toques complementares">Cores da marca com alguns toques complementares</SelectItem>
+                    <SelectItem value="Cores mais vibrantes e chamativas">Cores mais vibrantes e chamativas</SelectItem>
+                    <SelectItem value="Cores mais sóbrias/neutras">Cores mais sóbrias/neutras</SelectItem>
+                    <SelectItem value="Fundo claro predominante">Fundo claro predominante</SelectItem>
+                    <SelectItem value="Fundo escuro predominante">Fundo escuro predominante</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Preferência de tipografia</Label>
+                <Select value={briefForm.typographyPreference || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, typographyPreference: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-typography"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Usar estritamente as fontes oficiais da marca">Usar estritamente as fontes oficiais da marca</SelectItem>
+                    <SelectItem value="Fontes similares mantendo o estilo">Fontes similares mantendo o estilo</SelectItem>
+                    <SelectItem value="Permitir novas fontes desde que legíveis">Permitir novas fontes desde que legíveis</SelectItem>
+                    <SelectItem value="Preferência por fontes serifadas (clássicas)">Preferência por fontes serifadas (clássicas)</SelectItem>
+                    <SelectItem value="Preferência por fontes sem serifa (modernas)">Preferência por fontes sem serifa (modernas)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b pb-1">Layout e Composição</h3>
+
+              <div className="space-y-1.5">
+                <Label>Hierarquia de informação (maior destaque visual)</Label>
+                <Select value={briefForm.infoHierarchy || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, infoHierarchy: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-hierarchy"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Headline/título principal">Headline/título principal</SelectItem>
+                    <SelectItem value="Imagem/foto/ilustração">Imagem/foto/ilustração</SelectItem>
+                    <SelectItem value="Benefício/resultado prometido">Benefício/resultado prometido</SelectItem>
+                    <SelectItem value="Prova social (número, depoimento)">Prova social (número, depoimento)</SelectItem>
+                    <SelectItem value="Call to action (botão/chamada)">Call to action (botão/chamada)</SelectItem>
+                    <SelectItem value="Logo/marca">Logo/marca</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Tipo de imagem / visual</Label>
+                <Select value={briefForm.imageType || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, imageType: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-image-type"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Fotografias reais de pessoas">Fotografias reais de pessoas</SelectItem>
+                    <SelectItem value="Fotografias de produto/ambiente">Fotografias de produto/ambiente</SelectItem>
+                    <SelectItem value="Ilustrações flat/vetoriais">Ilustrações flat/vetoriais</SelectItem>
+                    <SelectItem value="Ilustrações mais complexas/3D">Ilustrações mais complexas/3D</SelectItem>
+                    <SelectItem value="Ícones/pictogramas simples">Ícones/pictogramas simples</SelectItem>
+                    <SelectItem value="Gráficos e elementos data driven">Gráficos e elementos data driven</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Complexidade do layout</Label>
+                <Select value={briefForm.layoutComplexity || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, layoutComplexity: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-layout"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Ultra minimalista (poucos elementos, muito respiro)">Ultra minimalista (poucos elementos, muito respiro)</SelectItem>
+                    <SelectItem value="Equilibrado (bem distribuído, sem poluição)">Equilibrado (bem distribuído, sem poluição)</SelectItem>
+                    <SelectItem value="Rico em elementos gráficos (formas, texturas, detalhes)">Rico em elementos gráficos (formas, texturas, detalhes)</SelectItem>
+                    <SelectItem value="Estilo editorial (como revista/apresentação)">Estilo editorial (como revista/apresentação)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Referência de estilo</Label>
+                <Select value={briefForm.styleReference || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, styleReference: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-style"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Similar aos posts atuais do próprio perfil">Similar aos posts atuais do próprio perfil</SelectItem>
+                    <SelectItem value="Seguir perfis de referência do nicho">Seguir perfis de referência do nicho</SelectItem>
+                    <SelectItem value="Tendências atuais de design do nicho">Tendências atuais de design do nicho</SelectItem>
+                    <SelectItem value="Clássico e atemporal (pouco modinha)">Clássico e atemporal (pouco modinha)</SelectItem>
+                    <SelectItem value="Visual ousado/diferentão dentro do nicho">Visual ousado/diferentão dentro do nicho</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b pb-1">Regras e Restrições</h3>
+
+              <div className="space-y-1.5">
+                <Label>Acessibilidade / legibilidade</Label>
+                <Select value={briefForm.accessibility || "none"} onValueChange={(v) => setBriefForm(p => ({ ...p, accessibility: v === "none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-brief-accessibility"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definido</SelectItem>
+                    <SelectItem value="Máxima — fonte grande, alto contraste, poucos textos">Máxima — fonte grande, alto contraste, poucos textos</SelectItem>
+                    <SelectItem value="Alta, com espaço para variações criativas">Alta, com espaço para variações criativas</SelectItem>
+                    <SelectItem value="Moderada — ok sacrificar legibilidade por estética">Moderada — ok sacrificar legibilidade por estética</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Elementos obrigatórios (selecione todos que se aplicam)</Label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    "Logo da marca em posição fixa",
+                    "Selo, carimbo ou assinatura visual",
+                    "Rodapé com contatos/site",
+                    "Marca d'água discreta",
+                    "Nenhum elemento obrigatório",
+                  ].map(opt => {
+                    const selected = briefForm.mandatoryElements?.includes(opt);
+                    return (
+                      <button
+                        key={opt} type="button"
+                        onClick={() => toggleMulti("mandatoryElements", opt)}
+                        className={`text-left text-xs px-2.5 py-2 rounded-md border transition-colors ${selected ? "border-primary bg-primary/10 text-primary font-medium" : "border-border text-muted-foreground hover:border-muted-foreground"}`}
+                        data-testid={`toggle-mandatory-${opt.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        {selected ? "✓ " : ""}{opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Restrições visuais (o que NÃO deve aparecer)</Label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    "Não usar fotos de banco de imagem padrão",
+                    "Não usar degradês muito fortes",
+                    "Não usar ilustrações infantis/demais",
+                    "Não usar muitas cores ao mesmo tempo",
+                    "Não usar bordas/contornos pesados",
+                    "Nenhuma restrição relevante",
+                  ].map(opt => {
+                    const selected = briefForm.visualRestrictions?.includes(opt);
+                    return (
+                      <button
+                        key={opt} type="button"
+                        onClick={() => toggleMulti("visualRestrictions", opt)}
+                        className={`text-left text-xs px-2.5 py-2 rounded-md border transition-colors ${selected ? "border-destructive bg-destructive/5 text-destructive font-medium" : "border-border text-muted-foreground hover:border-muted-foreground"}`}
+                        data-testid={`toggle-restriction-${opt.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        {selected ? "✗ " : ""}{opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Notas adicionais para o designer / IA</Label>
+                <Textarea
+                  placeholder="Ex: Perfis de referência a seguir, links de moodboard, observações específicas deste cliente..."
+                  rows={3}
+                  className="resize-none"
+                  value={briefForm.additionalNotes || ""}
+                  onChange={(e) => setBriefForm(p => ({ ...p, additionalNotes: e.target.value }))}
+                  data-testid="input-brief-notes"
+                />
+              </div>
+            </section>
+
+            <div className="flex gap-2 justify-end pt-1 border-t">
+              <Button variant="outline" size="sm" onClick={() => setBriefOpen(false)}>Cancelar</Button>
+              <Button
+                size="sm"
+                onClick={() => updateDesignBriefMutation.mutate(briefForm)}
+                disabled={updateDesignBriefMutation.isPending}
+                data-testid="button-save-brief"
+              >
+                {updateDesignBriefMutation.isPending ? "Salvando..." : "Salvar Briefing"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
