@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,14 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, Sparkles, Loader2, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { CalendarDays, Sparkles, Loader2, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 import type { ContentPiece, Project } from "@shared/schema";
-import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const statusColors: Record<string, string> = {
@@ -31,6 +30,32 @@ const platformDot: Record<string, string> = {
 
 const statusLabels: Record<string, string> = { draft: "Rascunho", review: "Revisão", approved: "Aprovado", published: "Publicado" };
 
+const objectiveOptions = [
+  { value: "crescimento", label: "Crescimento de audiência" },
+  { value: "leads", label: "Geração de leads" },
+  { value: "vendas", label: "Venda direta" },
+  { value: "engajamento", label: "Engajamento e comunidade" },
+  { value: "lancamento", label: "Lançamento de produto/serviço" },
+  { value: "posicionamento", label: "Posicionamento de marca" },
+];
+
+const contentMixOptions = [
+  { value: "equilibrado", label: "Equilibrado (educativo + relacional + promocional)" },
+  { value: "educativo", label: "Mais educativo — autoridade e valor" },
+  { value: "promocional", label: "Mais promocional — conversão e vendas" },
+  { value: "relacional", label: "Mais relacional — humanização e conexão" },
+];
+
+function buildPeriod(quinzena: "primeira" | "segunda", date: Date): string {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const monthPadded = String(month).padStart(2, "0");
+  const monthName = format(date, "MMMM yyyy", { locale: ptBR });
+  if (quinzena === "primeira") return `01/${monthPadded}/${year} a 15/${monthPadded}/${year} (1ª quinzena de ${monthName})`;
+  const lastDay = endOfMonth(date).getDate();
+  return `16/${monthPadded}/${year} a ${lastDay}/${monthPadded}/${year} (2ª quinzena de ${monthName})`;
+}
+
 export default function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [aiOpen, setAiOpen] = useState(false);
@@ -38,7 +63,17 @@ export default function Calendar() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const { toast } = useToast();
 
-  const [aiForm, setAiForm] = useState({ projectId: "", period: "", platforms: ["instagram", "linkedin"], topics: "", instructions: "" });
+  const [aiForm, setAiForm] = useState({
+    projectId: "",
+    quinzena: "primeira" as "primeira" | "segunda",
+    calendarMonth: new Date(),
+    platforms: ["instagram", "linkedin"],
+    objective: "posicionamento",
+    contentMix: "equilibrado",
+    postsPerWeek: "3",
+    topics: "",
+    instructions: "",
+  });
 
   const { data: content = [], isLoading } = useQuery<ContentPiece[]>({ queryKey: ["/api/content"] });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
@@ -61,16 +96,28 @@ export default function Calendar() {
     setGeneratingCalendar(true);
     try {
       const project = projects.find(p => p.id === Number(aiForm.projectId));
-      const period = aiForm.period || `${format(currentDate, "MMMM yyyy", { locale: ptBR })}`;
+      const period = buildPeriod(aiForm.quinzena, aiForm.calendarMonth);
 
       const res = await fetch("/api/ai/calendar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectContext: `${project?.name}. ${project?.description || ""}. ${project?.instructions || ""}`,
+          projectId: Number(aiForm.projectId),
+          projectContext: `
+            Nome: ${project?.name}.
+            Cliente: ${project?.clientName || ""}.
+            Descrição: ${project?.description || ""}.
+            Nicho: ${(project?.niche as string[])?.join(", ") || ""}.
+            Tom e instruções: ${project?.instructions || ""}.
+            Regras: ${project?.rules || ""}.
+            Formatos preferidos: ${(project?.formats as string[])?.join(", ") || ""}.
+          `.trim(),
+          brandRules: project?.rules || "",
           period,
           platforms: aiForm.platforms,
-          formats: ["post", "carrossel", "story", "reels"],
+          objective: objectiveOptions.find(o => o.value === aiForm.objective)?.label || aiForm.objective,
+          contentMix: aiForm.contentMix,
+          postsPerWeek: aiForm.postsPerWeek,
           topics: aiForm.topics,
           instructions: aiForm.instructions,
         }),
@@ -88,14 +135,19 @@ export default function Calendar() {
               format: post.format || "post",
               status: "draft",
               scheduledDate: post.date,
-              notes: `Objetivo: ${post.objective || ""}. Tópico: ${post.topic || ""}`,
+              notes: [
+                post.objective ? `Objetivo: ${post.objective}` : "",
+                post.contentPillar ? `Pilar: ${post.contentPillar}` : "",
+                post.hook ? `Gancho: ${post.hook}` : "",
+                post.topic ? `Tema: ${post.topic}` : "",
+              ].filter(Boolean).join(" | "),
             });
             created++;
           } catch (e) { /* skip */ }
         }
         queryClient.invalidateQueries({ queryKey: ["/api/content"] });
         setAiOpen(false);
-        toast({ title: `Calendário gerado! ${created} posts criados.` });
+        toast({ title: `Calendário gerado!`, description: `${created} posts criados com estratégia de conteúdo.` });
       }
     } catch (e) {
       toast({ title: "Erro ao gerar calendário", variant: "destructive" });
@@ -105,9 +157,10 @@ export default function Calendar() {
   };
 
   const dayContent = selectedDay ? getContentForDay(selectedDay) : [];
-
   const firstDayOfWeek = monthStart.getDay();
   const paddingDays = Array.from({ length: firstDayOfWeek }, (_, i) => i);
+
+  const selectedProject = projects.find(p => p.id === Number(aiForm.projectId));
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
@@ -180,7 +233,7 @@ export default function Calendar() {
               </div>
 
               <div className="flex items-center gap-4 mt-4">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-muted" /><span className="text-xs text-muted-foreground">Rascunho</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-muted border" /><span className="text-xs text-muted-foreground">Rascunho</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-200 dark:bg-amber-900/50" /><span className="text-xs text-muted-foreground">Revisão</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-green-200 dark:bg-green-900/50" /><span className="text-xs text-muted-foreground">Aprovado</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-blue-200 dark:bg-blue-900/50" /><span className="text-xs text-muted-foreground">Publicado</span></div>
@@ -251,42 +304,151 @@ export default function Calendar() {
       </div>
 
       <Dialog open={aiOpen} onOpenChange={setAiOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Gerar Calendário Quinzenal com IA</DialogTitle>
+            <DialogDescription>
+              A IA vai pensar como uma Social Media Sênior + Copywriter para montar um calendário estratégico.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
               <Label>Projeto *</Label>
               <Select value={aiForm.projectId} onValueChange={(v) => setAiForm(prev => ({ ...prev, projectId: v }))}>
-                <SelectTrigger data-testid="select-calendar-project"><SelectValue placeholder="Selecione o projeto" /></SelectTrigger>
+                <SelectTrigger data-testid="select-calendar-project">
+                  <SelectValue placeholder="Selecione o projeto" />
+                </SelectTrigger>
                 <SelectContent>
                   {projects.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {selectedProject && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted rounded-md px-2 py-1.5">
+                  <BookOpen className="w-3 h-3 shrink-0" />
+                  <span>Base de conhecimento do projeto será carregada automaticamente</span>
+                </div>
+              )}
             </div>
-            <div className="space-y-1">
-              <Label>Período (quinzena)</Label>
-              <Input placeholder="Ex: 01/07 à 15/07" value={aiForm.period} onChange={(e) => setAiForm(prev => ({ ...prev, period: e.target.value }))} data-testid="input-calendar-period" />
-              <p className="text-xs text-muted-foreground">Deixe em branco para usar o mês atual</p>
-            </div>
-            <div className="space-y-1">
-              <Label>Tópicos / Temas</Label>
-              <Textarea placeholder="Ex: lançamento de produto, dicas do setor, cases de sucesso..." rows={2} className="resize-none" value={aiForm.topics} onChange={(e) => setAiForm(prev => ({ ...prev, topics: e.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <Label>Instruções Adicionais</Label>
-              <Textarea placeholder="Ex: focar em engajamento, incluir datas comemorativas..." rows={2} className="resize-none" value={aiForm.instructions} onChange={(e) => setAiForm(prev => ({ ...prev, instructions: e.target.value }))} />
-            </div>
-            <div className="bg-muted rounded-md p-3">
+
+            <div className="space-y-1.5">
+              <Label>Quinzena</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAiForm(prev => ({ ...prev, quinzena: "primeira" }))}
+                  className={`px-3 py-2 rounded-md border text-sm transition-colors ${aiForm.quinzena === "primeira" ? "border-primary bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-muted-foreground"}`}
+                  data-testid="button-quinzena-primeira"
+                >
+                  1ª quinzena (01–15)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiForm(prev => ({ ...prev, quinzena: "segunda" }))}
+                  className={`px-3 py-2 rounded-md border text-sm transition-colors ${aiForm.quinzena === "segunda" ? "border-primary bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-muted-foreground"}`}
+                  data-testid="button-quinzena-segunda"
+                >
+                  2ª quinzena (16–30)
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => setAiForm(prev => ({ ...prev, calendarMonth: subMonths(prev.calendarMonth, 1) }))}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm font-medium flex-1 text-center capitalize">
+                  {format(aiForm.calendarMonth, "MMMM yyyy", { locale: ptBR })}
+                </span>
+                <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => setAiForm(prev => ({ ...prev, calendarMonth: addMonths(prev.calendarMonth, 1) }))}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground">
-                A IA irá criar automaticamente posts para Instagram e LinkedIn, distribuídos ao longo da quinzena, com formatos variados (posts, stories, carrosseis).
+                Período selecionado: <span className="font-medium">{buildPeriod(aiForm.quinzena, aiForm.calendarMonth)}</span>
               </p>
             </div>
-            <div className="flex gap-2 justify-end">
+
+            <div className="space-y-1.5">
+              <Label>Objetivo da quinzena *</Label>
+              <Select value={aiForm.objective} onValueChange={(v) => setAiForm(prev => ({ ...prev, objective: v }))}>
+                <SelectTrigger data-testid="select-calendar-objective">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {objectiveOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Mix de conteúdo</Label>
+              <Select value={aiForm.contentMix} onValueChange={(v) => setAiForm(prev => ({ ...prev, contentMix: v }))}>
+                <SelectTrigger data-testid="select-calendar-mix">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {contentMixOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Como distribuir educativo, relacional e promocional</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Posts por semana (por plataforma)</Label>
+              <Select value={aiForm.postsPerWeek} onValueChange={(v) => setAiForm(prev => ({ ...prev, postsPerWeek: v }))}>
+                <SelectTrigger data-testid="select-calendar-frequency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 posts/semana</SelectItem>
+                  <SelectItem value="3">3 posts/semana</SelectItem>
+                  <SelectItem value="4">4 posts/semana</SelectItem>
+                  <SelectItem value="5">5 posts/semana</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Temas / Tópicos específicos</Label>
+              <Textarea
+                placeholder="Ex: lançamento do novo serviço, depoimentos de clientes, dicas do setor..."
+                rows={2}
+                className="resize-none"
+                value={aiForm.topics}
+                onChange={(e) => setAiForm(prev => ({ ...prev, topics: e.target.value }))}
+                data-testid="input-calendar-topics"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Instruções adicionais</Label>
+              <Textarea
+                placeholder="Ex: evitar posts promocionais na primeira semana, incluir datas comemorativas, usar mais stories..."
+                rows={2}
+                className="resize-none"
+                value={aiForm.instructions}
+                onChange={(e) => setAiForm(prev => ({ ...prev, instructions: e.target.value }))}
+                data-testid="input-calendar-instructions"
+              />
+            </div>
+
+            <div className="bg-muted/50 border border-border rounded-md p-3 space-y-1">
+              <p className="text-xs font-medium text-foreground">Como a IA vai pensar:</p>
+              <ul className="text-xs text-muted-foreground space-y-0.5">
+                <li>· Aplica funil de consciência (topo → meio → fundo)</li>
+                <li>· Varia formatos estrategicamente por dia da semana</li>
+                <li>· Usa ganchos de copywriting para cada título</li>
+                <li>· Adapta tom por plataforma (Instagram vs LinkedIn)</li>
+                <li>· Usa a base de conhecimento do projeto automaticamente</li>
+              </ul>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-1">
               <Button variant="outline" size="sm" onClick={() => setAiOpen(false)}>Cancelar</Button>
-              <Button size="sm" onClick={handleGenerateCalendar} disabled={generatingCalendar} data-testid="button-confirm-generate-calendar">
-                {generatingCalendar ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Calendário</>}
+              <Button size="sm" onClick={handleGenerateCalendar} disabled={generatingCalendar || !aiForm.projectId} data-testid="button-confirm-generate-calendar">
+                {generatingCalendar
+                  ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando estratégia...</>
+                  : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Calendário</>
+                }
               </Button>
             </div>
           </div>
