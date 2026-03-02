@@ -440,7 +440,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
-    // Gemini
+    // Gemini (text + image models)
     const geminiKey = await storage.getSetting("ai_gemini_key");
     if (geminiKey) {
       try {
@@ -454,7 +454,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               m.supportedGenerationMethods?.includes("generateContent") &&
               m.name.includes("gemini") &&
               !m.name.includes("embedding") &&
-              !m.name.includes("vision")
+              !m.name.includes("image-generation")
             )
             .map((m: any) => ({
               id: m.name.replace("models/", ""),
@@ -465,6 +465,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       } catch (e) {
         console.error("Gemini models fetch error:", e);
       }
+      // Gemini image generation models (hardcoded — known image-capable endpoints)
+      result.gemini_image = [
+        { id: "gemini-2.0-flash-preview-image-generation", name: "Gemini 2.0 Flash Preview (Imagem)" },
+        { id: "gemini-2.0-flash-exp-image-generation", name: "Gemini 2.0 Flash Exp (Imagem)" },
+      ];
     }
 
     res.json(result);
@@ -519,7 +524,7 @@ Retorne um JSON com:
   // --- AI: GENERATE IMAGE ---
   app.post("/api/ai/image", async (req, res) => {
     try {
-      const { prompt, platform, format, brandColors, style, designBrief, designAgent } = req.body;
+      const { prompt, platform, format, brandColors, style, designBrief, designAgent, provider = "openai", model } = req.body;
 
       const briefLines: string[] = [];
       if (designBrief) {
@@ -565,6 +570,26 @@ Retorne um JSON com:
         "High quality, professional marketing image for social media.",
       ].filter(Boolean).join("\n");
 
+      if (provider === "gemini") {
+        const key = await storage.getSetting("ai_gemini_key");
+        if (!key) throw new Error("Chave Gemini não configurada em Configurações → IA.");
+        const genAI = new GoogleGenerativeAI(key);
+        const imageModel = model || "gemini-2.0-flash-preview-image-generation";
+        const gemModel = genAI.getGenerativeModel({ model: imageModel });
+        const result = await gemModel.generateContent({
+          contents: [{ role: "user", parts: [{ text: enhancedPrompt }] }],
+          generationConfig: { responseModalities: ["image"] } as any,
+        });
+        const parts = result.response.candidates?.[0]?.content?.parts || [];
+        for (const part of parts as any[]) {
+          if (part.inlineData) {
+            return res.json({ b64_json: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" });
+          }
+        }
+        throw new Error("Gemini não retornou imagem. Tente novamente ou verifique o prompt.");
+      }
+
+      // Default: OpenAI gpt-image-1
       const openaiClient = await getOpenAIClient();
       const response = await openaiClient.images.generate({
         model: "gpt-image-1",
