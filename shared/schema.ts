@@ -136,6 +136,14 @@ export const insertPromptSchema = createInsertSchema(prompts).omit({ id: true, c
 export type InsertPrompt = z.infer<typeof insertPromptSchema>;
 export type Prompt = typeof prompts.$inferSelect;
 
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),
+});
+
+export type AppSetting = typeof appSettings.$inferSelect;
+
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
