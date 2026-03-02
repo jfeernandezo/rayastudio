@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw,
-  BookOpen, Zap, Share2, ImageIcon, Layers, Palette, Download, AlertCircle, Link2, Send
+  BookOpen, Zap, ImageIcon, Layers, Palette, Download, AlertCircle, Link2, Send, Cpu
 } from "lucide-react";
 import type { Project, ContentPiece, Template, KnowledgeBase, Prompt, AgentProfile } from "@shared/schema";
 
@@ -73,6 +73,10 @@ export default function ContentCreator() {
 
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState("profissional e engajante");
+  const [aiProvider, setAiProviderRaw] = useState(() => localStorage.getItem("raya_ai_provider") || "openai");
+  const [aiModel, setAiModelRaw] = useState(() => localStorage.getItem("raya_ai_model") || "gpt-4.1");
+  const setAiProvider = (v: string) => { localStorage.setItem("raya_ai_provider", v); setAiProviderRaw(v); };
+  const setAiModel = (v: string) => { localStorage.setItem("raya_ai_model", v); setAiModelRaw(v); };
   const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
   const [selectedDesignAgent, setSelectedDesignAgent] = useState<string>("none");
   const [generatingCaption, setGeneratingCaption] = useState(false);
@@ -96,6 +100,13 @@ export default function ContentCreator() {
   useEffect(() => {
     if (content) setForm(content);
   }, [content?.id]);
+
+  const { data: aiModels = {} } = useQuery<Record<string, { id: string; name: string }[]>>({
+    queryKey: ["/api/ai/models"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const availableProviders = Object.keys(aiModels).filter(p => aiModels[p]?.length > 0);
+  const modelsForProvider = aiModels[aiProvider] || [];
 
   const { data: templates = [] } = useQuery<Template[]>({ queryKey: ["/api/templates"] });
   const { data: knowledge = [] } = useQuery<KnowledgeBase[]>({
@@ -178,6 +189,8 @@ export default function ContentCreator() {
           topic: aiTopic || form.title,
           tone: aiTone,
           knowledgeContext,
+          provider: aiProvider,
+          model: aiModel,
           ...(isCarousel && slideCount ? { carouselSlides: slideCount } : {}),
         }),
       });
@@ -393,6 +406,52 @@ export default function ContentCreator() {
             </TabsContent>
 
             <TabsContent value="ai" className="space-y-3 mt-3">
+              {/* AI Model Selector */}
+              <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-1.5">
+                <Label className="text-xs flex items-center gap-1 text-muted-foreground">
+                  <Cpu className="w-3 h-3" /> Modelo de IA
+                </Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={aiProvider}
+                    onValueChange={(v) => {
+                      setAiProvider(v);
+                      const firstModel = aiModels[v]?.[0]?.id;
+                      if (firstModel) setAiModel(firstModel);
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-28 shrink-0" data-testid="select-ai-provider">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableProviders.length > 0 ? (
+                        availableProviders.map(p => (
+                          <SelectItem key={p} value={p}>
+                            {p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "Gemini"}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="openai">OpenAI</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Select value={aiModel} onValueChange={setAiModel}>
+                    <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-ai-model">
+                      <SelectValue placeholder="Selecionar modelo..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {modelsForProvider.length > 0 ? (
+                        modelsForProvider.map(m => (
+                          <SelectItem key={m.id} value={m.id}>{m.id}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value={aiModel}>{aiModel}</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <Label className="text-xs">Template</Label>
                 <Select value={selectedTemplate} onValueChange={handleTemplateChange}>
