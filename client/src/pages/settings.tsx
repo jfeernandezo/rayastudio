@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle2, XCircle, Eye, EyeOff, Save, Trash2, ExternalLink, AlertCircle, KeyRound } from "lucide-react";
+import { PlatformIcon } from "@/components/platform-icon";
 
 type SettingsData = {
   settings: Record<string, string>;
@@ -317,8 +318,8 @@ export default function Settings() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-[#7B68EE]/10 flex items-center justify-center shrink-0">
-                      <div className="w-3.5 h-3.5 rounded-sm bg-[#7B68EE]" />
+                    <div className="w-7 h-7 rounded-lg border bg-white flex items-center justify-center shrink-0">
+                      <PlatformIcon domain="clickup.com" size={16} />
                     </div>
                     <div>
                       <p className="text-sm font-semibold">ClickUp</p>
@@ -375,8 +376,8 @@ export default function Settings() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                      <div className="w-3.5 h-3.5 rounded bg-gradient-to-br from-blue-500 to-blue-600" />
+                    <div className="w-7 h-7 rounded-lg border bg-white flex items-center justify-center shrink-0">
+                      <PlatformIcon domain="business.facebook.com" size={16} />
                     </div>
                     <div>
                       <p className="text-sm font-semibold">Meta Business Portfolio</p>
