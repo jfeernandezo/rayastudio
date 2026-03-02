@@ -41,6 +41,9 @@ export const projects = pgTable("projects", {
   rules: text("rules"),
   instructions: text("instructions"),
   primaryFont: text("primary_font"),
+  clickupListId: text("clickup_list_id"),
+  metaInstagramAccountId: text("meta_instagram_account_id"),
+  metaPageId: text("meta_page_id"),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
 });
 
