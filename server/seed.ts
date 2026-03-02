@@ -5,18 +5,16 @@ import { hashPassword } from "./auth";
 import { randomUUID } from "crypto";
 
 export async function seedDatabase() {
-  // Seed default users if no users exist
+  // Seed default user if no users exist
   const existingUsers = await db.select().from(users);
   if (existingUsers.length === 0) {
-    const hashedAdmin = await hashPassword("raya2024");
-    const hashedMain = await hashPassword("Adm#nexus26");
+    const hashed = await hashPassword("Adm#nexus26");
     await db.insert(users).values([
-      { id: randomUUID(), username: "admin", password: hashedAdmin },
-      { id: randomUUID(), username: "adm@v3studio.com.br", password: hashedMain },
+      { id: randomUUID(), username: "adm@v3nexus.com.br", password: hashed },
     ]);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("  Raya Studio — Primeiro acesso");
-    console.log("  Usuário: adm@v3studio.com.br");
+    console.log("  Usuário: adm@v3nexus.com.br");
     console.log("  Senha:   Adm#nexus26");
     console.log("  (Altere em Configurações → Segurança)");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
