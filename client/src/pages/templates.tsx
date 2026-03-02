@@ -1,25 +1,28 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Trash2, Edit, Globe, FolderKanban } from "lucide-react";
+import { Plus, FileText, Trash2, Edit, Globe, Upload, Loader2, Image, Sparkles } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import type { Template, Project } from "@shared/schema";
-import { insertTemplateSchema } from "@shared/schema";
-import { zodResolver } from "@hookform/resolvers/zod";
 
 export default function Templates() {
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<Template | null>(null);
+  const [extractOpen, setExtractOpen] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractResult, setExtractResult] = useState<any>(null);
+  const [extractPreview, setExtractPreview] = useState<string | null>(null);
+  const extractFileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const { data: templates = [], isLoading } = useQuery<Template[]>({ queryKey: ["/api/templates"] });
@@ -29,8 +32,17 @@ export default function Templates() {
     defaultValues: { name: "", description: "", platform: "any", format: "any", captionTemplate: "", promptTemplate: "", category: "", isGlobal: true, projectId: null as number | null },
   });
 
-  const openCreate = () => { setEditItem(null); form.reset({ name: "", description: "", platform: "any", format: "any", captionTemplate: "", promptTemplate: "", category: "", isGlobal: true, projectId: null }); setOpen(true); };
-  const openEdit = (t: Template) => { setEditItem(t); form.reset({ name: t.name, description: t.description || "", platform: t.platform || "any", format: t.format || "any", captionTemplate: t.captionTemplate || "", promptTemplate: t.promptTemplate || "", category: t.category || "", isGlobal: t.isGlobal ?? true, projectId: t.projectId || null }); setOpen(true); };
+  const openCreate = () => {
+    setEditItem(null);
+    form.reset({ name: "", description: "", platform: "any", format: "any", captionTemplate: "", promptTemplate: "", category: "", isGlobal: true, projectId: null });
+    setOpen(true);
+  };
+
+  const openEdit = (t: Template) => {
+    setEditItem(t);
+    form.reset({ name: t.name, description: t.description || "", platform: t.platform || "any", format: t.format || "any", captionTemplate: t.captionTemplate || "", promptTemplate: t.promptTemplate || "", category: t.category || "", isGlobal: t.isGlobal ?? true, projectId: t.projectId || null });
+    setOpen(true);
+  };
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => {
@@ -46,6 +58,47 @@ export default function Templates() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/templates"] }); toast({ title: "Template removido" }); },
   });
 
+  const handleExtractImage = async (file: File) => {
+    setExtracting(true);
+    setExtractResult(null);
+    const reader = new FileReader();
+    reader.onload = (e) => setExtractPreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await fetch("/api/ai/analyze-image", { method: "POST", body: formData });
+      const data = await res.json();
+      setExtractResult(data);
+      toast({ title: "Imagem analisada! Revise e salve como template." });
+    } catch {
+      toast({ title: "Erro ao analisar imagem", variant: "destructive" });
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const saveExtractedAsTemplate = () => {
+    if (!extractResult) return;
+    const captionStructure = extractResult.suggestedCaption
+      ? `[HOOK/TÍTULO]\n\n${extractResult.suggestedCaption}\n\n[HASHTAGS]`
+      : "[HOOK/TÍTULO]\n\n[CORPO DO CONTEÚDO]\n\n[CHAMADA PARA AÇÃO]\n\n[HASHTAGS]";
+    form.reset({
+      name: extractResult.contentType ? `Template: ${extractResult.contentType}` : "Template Extraído",
+      description: extractResult.description || "Template extraído a partir de imagem de referência.",
+      platform: "any",
+      format: "any",
+      captionTemplate: captionStructure,
+      promptTemplate: extractResult.imagePromptToReplicate || "",
+      category: extractResult.contentType || "Referência Visual",
+      isGlobal: true,
+      projectId: null,
+    });
+    setEditItem(null);
+    setExtractOpen(false);
+    setOpen(true);
+  };
+
   const platformLabels: Record<string, string> = { instagram: "Instagram", linkedin: "LinkedIn" };
   const formatLabels: Record<string, string> = { post: "Post", story: "Story", carrossel: "Carrossel", reels: "Reels" };
 
@@ -56,9 +109,14 @@ export default function Templates() {
           <h1 className="text-xl font-semibold text-foreground">Templates</h1>
           <p className="text-sm text-muted-foreground">Modelos de conteúdo reutilizáveis</p>
         </div>
-        <Button size="sm" onClick={openCreate} data-testid="button-create-template">
-          <Plus className="w-4 h-4 mr-1" /> Novo Template
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => { setExtractResult(null); setExtractPreview(null); setExtractOpen(true); }} data-testid="button-extract-from-image">
+            <Image className="w-4 h-4 mr-1" /> Extrair de Imagem
+          </Button>
+          <Button size="sm" onClick={openCreate} data-testid="button-create-template">
+            <Plus className="w-4 h-4 mr-1" /> Novo Template
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -69,7 +127,7 @@ export default function Templates() {
         <Card>
           <CardContent className="p-12 flex flex-col items-center gap-3">
             <FileText className="w-12 h-12 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground text-center">Nenhum template ainda.<br />Crie templates para agilizar a produção.</p>
+            <p className="text-sm text-muted-foreground text-center">Nenhum template ainda.<br />Crie templates ou extraia de uma imagem de referência.</p>
           </CardContent>
         </Card>
       ) : (
@@ -107,7 +165,7 @@ export default function Templates() {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editItem ? "Editar Template" : "Criar Template"}</DialogTitle>
           </DialogHeader>
@@ -152,11 +210,11 @@ export default function Templates() {
             </div>
             <div className="space-y-1">
               <Label>Template de Legenda</Label>
-              <Textarea placeholder="Ex: [HEADLINE]\n\n[CORPO DO POST]\n\nO que você achou? Conta nos comentários!" rows={4} className="resize-none" {...form.register("captionTemplate")} />
+              <Textarea placeholder="Ex: [HEADLINE]\n\n[CORPO DO POST]\n\nO que você achou? Conta nos comentários!" rows={5} className="resize-none" {...form.register("captionTemplate")} />
             </div>
             <div className="space-y-1">
-              <Label>Template de Prompt para IA</Label>
-              <Textarea placeholder="Ex: Crie um post sobre [TÓPICO] para [PÚBLICO], com tom [TOM]..." rows={3} className="resize-none" {...form.register("promptTemplate")} />
+              <Label>Prompt Visual (para replicar o estilo da imagem)</Label>
+              <Textarea placeholder="Ex: Describe the image style, colors, and visual elements to replicate..." rows={3} className="resize-none" {...form.register("promptTemplate")} />
             </div>
             <div className="space-y-1">
               <Label>Descrição</Label>
@@ -165,10 +223,102 @@ export default function Templates() {
             <div className="flex gap-2 justify-end">
               <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancelar</Button>
               <Button type="submit" size="sm" disabled={saveMutation.isPending} data-testid="button-submit-template">
-                {saveMutation.isPending ? "Salvando..." : "Salvar"}
+                {saveMutation.isPending ? "Salvando..." : "Salvar Template"}
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={extractOpen} onOpenChange={setExtractOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Extrair Template de Imagem
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Envie uma imagem de referência e a IA vai analisar a estrutura, estilo visual e texto para criar um template reutilizável.
+            </p>
+
+            <div
+              className="border-2 border-dashed border-border rounded-md p-6 text-center cursor-pointer hover-elevate"
+              onClick={() => extractFileRef.current?.click()}
+              data-testid="extract-upload-zone"
+            >
+              <input
+                ref={extractFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { if (e.target.files?.[0]) handleExtractImage(e.target.files[0]); }}
+              />
+              {extracting ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <p className="text-sm text-muted-foreground">Analisando estrutura e estilo...</p>
+                </div>
+              ) : extractPreview ? (
+                <div className="space-y-2">
+                  <img src={extractPreview} alt="Preview" className="max-h-40 mx-auto rounded-md object-contain" />
+                  <p className="text-xs text-muted-foreground">Clique para trocar a imagem</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="w-8 h-8 text-muted-foreground" />
+                  <p className="text-sm font-medium text-foreground">Clique para enviar uma imagem</p>
+                  <p className="text-xs text-muted-foreground">PNG, JPG ou WEBP · Máx. 20MB</p>
+                </div>
+              )}
+            </div>
+
+            {extractResult && (
+              <div className="space-y-3 p-3 rounded-md border border-border bg-muted/30">
+                <p className="text-xs font-semibold text-foreground">Análise da IA</p>
+                {extractResult.description && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-0.5">Descrição</p>
+                    <p className="text-xs text-foreground">{extractResult.description}</p>
+                  </div>
+                )}
+                {extractResult.style && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-0.5">Estilo Visual</p>
+                    <p className="text-xs text-foreground">{extractResult.style}</p>
+                  </div>
+                )}
+                {extractResult.contentType && (
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">Tipo:</p>
+                    <Badge variant="outline" className="text-xs">{extractResult.contentType}</Badge>
+                  </div>
+                )}
+                {extractResult.imagePromptToReplicate && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-0.5">Prompt para replicar o visual</p>
+                    <p className="text-xs text-foreground bg-muted p-2 rounded-sm line-clamp-3">{extractResult.imagePromptToReplicate}</p>
+                  </div>
+                )}
+                {extractResult.suggestedCaption && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-0.5">Estrutura de legenda sugerida</p>
+                    <p className="text-xs text-foreground bg-muted p-2 rounded-sm line-clamp-3">{extractResult.suggestedCaption}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={() => setExtractOpen(false)}>Cancelar</Button>
+              {extractResult && (
+                <Button size="sm" onClick={saveExtractedAsTemplate} data-testid="button-save-extracted-template">
+                  <Plus className="w-4 h-4 mr-1" /> Salvar como Template
+                </Button>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

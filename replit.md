@@ -1,14 +1,14 @@
-# ContentFlow — replit.md
+# Raya Studio — replit.md
 
 ## Overview
 
-ContentFlow is a social media content management platform built for digital agencies. It helps teams create, organize, schedule, and publish content across Instagram and LinkedIn for multiple client projects.
+Raya Studio is a social media content management platform built for digital agencies. It helps teams create, organize, schedule, and publish content across Instagram and LinkedIn for multiple client projects.
 
 **Core features:**
-- **Projects** — manage multiple client brands, each with their own instructions, brand colors, niches, and tone-of-voice rules
+- **Projects** — manage multiple client brands (treated as clients), each with their own instructions, brand colors (60-30-10 palette), niches, and tone-of-voice rules
 - **Content Creator** — AI-assisted caption and image generation per content piece (post, story, carrossel, reels)
 - **Calendar** — visual monthly calendar for scheduling content across platforms
-- **Templates** — reusable caption/prompt templates (global or per-project)
+- **Templates** — reusable caption/prompt templates (global or per-project); includes "Extrair de Imagem" feature that analyzes a reference image via AI and creates a template from its structure
 - **Knowledge Base** — store brand knowledge (target audience, tone, references, etc.) per project
 - **Prompts** — save and reuse AI prompts categorized by type, platform, and format
 - **AI integrations** — OpenAI for caption generation, image generation (gpt-image-1), image analysis, voice chat, and batch processing

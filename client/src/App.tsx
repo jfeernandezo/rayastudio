@@ -48,7 +48,7 @@ export default function App() {
               <header className="flex items-center gap-2 px-4 py-2 border-b border-border bg-background h-12 shrink-0">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
                 <div className="flex-1" />
-                <span className="text-xs text-muted-foreground font-medium">ContentFlow</span>
+                <span className="text-xs text-muted-foreground font-medium">Raya Studio</span>
               </header>
               <main className="flex-1 overflow-auto">
                 <Router />

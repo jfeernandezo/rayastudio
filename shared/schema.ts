@@ -19,7 +19,7 @@ export const projects = pgTable("projects", {
   description: text("description"),
   clientName: text("client_name"),
   logoUrl: text("logo_url"),
-  brandColors: jsonb("brand_colors").$type<string[]>().default([]),
+  brandColors: jsonb("brand_colors").$type<{ dominant: string; secondary: string; accent: string } | null>().default(null),
   niche: text("niche").array().default([]),
   formats: text("formats").array().default([]),
   rules: text("rules"),

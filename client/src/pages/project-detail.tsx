@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -11,13 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ArrowLeft, FileText, Image, Trash2, Edit, Settings, ExternalLink, Instagram, Linkedin } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, Edit, Settings } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { insertContentPieceSchema, insertProjectSchema, type Project, type ContentPiece } from "@shared/schema";
-import { z } from "zod";
+import { type Project, type ContentPiece } from "@shared/schema";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -27,6 +24,13 @@ const statusColors: Record<string, string> = {
 };
 const statusLabels: Record<string, string> = { draft: "Rascunho", review: "Revisão", approved: "Aprovado", published: "Publicado" };
 const formatLabels: Record<string, string> = { post: "Post", story: "Story", carrossel: "Carrossel", reels: "Reels" };
+
+function getBrandColors(raw: any): { dominant: string; secondary: string; accent: string } | null {
+  if (!raw) return null;
+  if (Array.isArray(raw) && raw.length >= 3) return { dominant: raw[0], secondary: raw[1], accent: raw[2] };
+  if (raw.dominant) return raw as { dominant: string; secondary: string; accent: string };
+  return null;
+}
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -49,7 +53,10 @@ export default function ProjectDetail() {
   });
 
   const projectForm = useForm({
-    defaultValues: { name: "", description: "", clientName: "", rules: "", instructions: "" },
+    defaultValues: {
+      name: "", description: "", clientName: "", rules: "", instructions: "",
+      brandColorDominant: "#6B46C1", brandColorSecondary: "#9F7AEA", brandColorAccent: "#E9D8FD",
+    },
   });
 
   const createContentMutation = useMutation({
@@ -70,9 +77,35 @@ export default function ProjectDetail() {
   });
 
   const updateProjectMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("PATCH", `/api/projects/${id}`, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/projects", id] }); setSettingsOpen(false); toast({ title: "Projeto atualizado!" }); },
+    mutationFn: (data: any) => {
+      const { brandColorDominant, brandColorSecondary, brandColorAccent, ...rest } = data;
+      return apiRequest("PATCH", `/api/projects/${id}`, {
+        ...rest,
+        brandColors: { dominant: brandColorDominant, secondary: brandColorSecondary, accent: brandColorAccent },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id] });
+      setSettingsOpen(false);
+      toast({ title: "Projeto atualizado!" });
+    },
   });
+
+  const openSettings = () => {
+    if (!project) return;
+    const palette = getBrandColors(project.brandColors);
+    projectForm.reset({
+      name: project.name,
+      description: project.description || "",
+      clientName: project.clientName || "",
+      rules: project.rules || "",
+      instructions: project.instructions || "",
+      brandColorDominant: palette?.dominant || "#6B46C1",
+      brandColorSecondary: palette?.secondary || "#9F7AEA",
+      brandColorAccent: palette?.accent || "#E9D8FD",
+    });
+    setSettingsOpen(true);
+  };
 
   if (loadingProject) return (
     <div className="p-6 max-w-4xl mx-auto space-y-4">
@@ -95,6 +128,8 @@ export default function ProjectDetail() {
     published: content.filter(c => c.status === "published"),
   };
 
+  const palette = getBrandColors(project.brandColors);
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
       <div className="flex items-center gap-3">
@@ -102,10 +137,31 @@ export default function ProjectDetail() {
           <Link href="/projects"><ArrowLeft className="w-4 h-4" /></Link>
         </Button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold text-foreground">{project.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-foreground">{project.name}</h1>
+            {palette && (
+              <div className="flex items-center gap-1 ml-1" title="Paleta de cores do cliente">
+                <span
+                  className="w-4 h-4 rounded-sm border border-border shadow-sm"
+                  style={{ backgroundColor: palette.dominant }}
+                  title={`Dominante 60%: ${palette.dominant}`}
+                />
+                <span
+                  className="w-3 h-3 rounded-sm border border-border shadow-sm"
+                  style={{ backgroundColor: palette.secondary }}
+                  title={`Secundária 30%: ${palette.secondary}`}
+                />
+                <span
+                  className="w-2 h-2 rounded-sm border border-border shadow-sm"
+                  style={{ backgroundColor: palette.accent }}
+                  title={`Destaque 10%: ${palette.accent}`}
+                />
+              </div>
+            )}
+          </div>
           {project.clientName && <p className="text-sm text-muted-foreground">{project.clientName}</p>}
         </div>
-        <Button variant="outline" size="sm" onClick={() => { projectForm.reset({ name: project.name, description: project.description || "", clientName: project.clientName || "", rules: project.rules || "", instructions: project.instructions || "" }); setSettingsOpen(true); }} data-testid="button-project-settings">
+        <Button variant="outline" size="sm" onClick={openSettings} data-testid="button-project-settings">
           <Settings className="w-4 h-4 mr-1" /> Configurações
         </Button>
         <Button size="sm" onClick={() => setNewContentOpen(true)} data-testid="button-new-content">
@@ -230,21 +286,97 @@ export default function ProjectDetail() {
       </Dialog>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Configurações do Projeto</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Configurações do Cliente</DialogTitle></DialogHeader>
           <form onSubmit={projectForm.handleSubmit((d) => updateProjectMutation.mutate(d))} className="space-y-3">
-            <div className="space-y-1">
-              <Label>Nome do Projeto</Label>
-              <Input data-testid="input-edit-project-name" {...projectForm.register("name")} />
-            </div>
-            <div className="space-y-1">
-              <Label>Cliente</Label>
-              <Input data-testid="input-edit-client-name" {...projectForm.register("clientName")} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Nome do Projeto</Label>
+                <Input data-testid="input-edit-project-name" {...projectForm.register("name")} />
+              </div>
+              <div className="space-y-1">
+                <Label>Nome do Cliente</Label>
+                <Input data-testid="input-edit-client-name" {...projectForm.register("clientName")} />
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Descrição</Label>
               <Textarea rows={2} {...projectForm.register("description")} />
             </div>
+
+            <div className="space-y-2 p-3 rounded-md border border-border bg-muted/30">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Paleta de Cores</Label>
+                <span className="text-xs text-muted-foreground">Regra 60 · 30 · 10</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      className="w-8 h-8 rounded cursor-pointer border border-border"
+                      data-testid="color-dominant"
+                      {...projectForm.register("brandColorDominant")}
+                    />
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Dominante</p>
+                      <p className="text-xs text-muted-foreground">60% · Base</p>
+                    </div>
+                  </div>
+                  <Input
+                    className="h-7 text-xs font-mono"
+                    placeholder="#000000"
+                    {...projectForm.register("brandColorDominant")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      className="w-8 h-8 rounded cursor-pointer border border-border"
+                      data-testid="color-secondary"
+                      {...projectForm.register("brandColorSecondary")}
+                    />
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Secundária</p>
+                      <p className="text-xs text-muted-foreground">30% · Contraste</p>
+                    </div>
+                  </div>
+                  <Input
+                    className="h-7 text-xs font-mono"
+                    placeholder="#000000"
+                    {...projectForm.register("brandColorSecondary")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      className="w-8 h-8 rounded cursor-pointer border border-border"
+                      data-testid="color-accent"
+                      {...projectForm.register("brandColorAccent")}
+                    />
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Destaque</p>
+                      <p className="text-xs text-muted-foreground">10% · Acento</p>
+                    </div>
+                  </div>
+                  <Input
+                    className="h-7 text-xs font-mono"
+                    placeholder="#000000"
+                    {...projectForm.register("brandColorAccent")}
+                  />
+                </div>
+              </div>
+              {projectForm.watch("brandColorDominant") && (
+                <div className="flex rounded-md overflow-hidden h-5 mt-1">
+                  <div className="w-[60%]" style={{ backgroundColor: projectForm.watch("brandColorDominant") }} title="60% Dominante" />
+                  <div className="w-[30%]" style={{ backgroundColor: projectForm.watch("brandColorSecondary") }} title="30% Secundária" />
+                  <div className="w-[10%]" style={{ backgroundColor: projectForm.watch("brandColorAccent") }} title="10% Destaque" />
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1">
               <Label>Regras de Conteúdo</Label>
               <Textarea placeholder="O que NÃO fazer, restrições..." rows={2} {...projectForm.register("rules")} />
@@ -255,7 +387,9 @@ export default function ProjectDetail() {
             </div>
             <div className="flex gap-2 justify-end">
               <Button type="button" variant="outline" size="sm" onClick={() => setSettingsOpen(false)}>Cancelar</Button>
-              <Button type="submit" size="sm" disabled={updateProjectMutation.isPending}>Salvar</Button>
+              <Button type="submit" size="sm" disabled={updateProjectMutation.isPending}>
+                {updateProjectMutation.isPending ? "Salvando..." : "Salvar"}
+              </Button>
             </div>
           </form>
         </DialogContent>
