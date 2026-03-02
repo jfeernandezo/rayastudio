@@ -1,7 +1,7 @@
 import { eq, desc, and } from "drizzle-orm";
 import { db } from "./db";
 import {
-  users, projects, contentPieces, templates, knowledgeBase, prompts, conversations, messages,
+  users, projects, contentPieces, templates, knowledgeBase, prompts, conversations, messages, projectFonts,
   type User, type InsertUser,
   type Project, type InsertProject,
   type ContentPiece, type InsertContentPiece,
@@ -9,6 +9,7 @@ import {
   type KnowledgeBase, type InsertKnowledgeBase,
   type Prompt, type InsertPrompt,
   type Conversation, type Message,
+  type ProjectFont, type InsertProjectFont,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -22,6 +23,11 @@ export interface IStorage {
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, project: Partial<InsertProject>): Promise<Project>;
   deleteProject(id: number): Promise<void>;
+
+  getProjectFonts(projectId: number): Promise<ProjectFont[]>;
+  createProjectFont(font: InsertProjectFont): Promise<ProjectFont>;
+  updateProjectFont(id: number, font: Partial<InsertProjectFont>): Promise<ProjectFont>;
+  deleteProjectFont(id: number): Promise<void>;
 
   getContentPieces(projectId?: number): Promise<ContentPiece[]>;
   getContentPiece(id: number): Promise<ContentPiece | undefined>;
@@ -86,6 +92,21 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteProject(id: number) {
     await db.delete(projects).where(eq(projects.id, id));
+  }
+
+  async getProjectFonts(projectId: number) {
+    return db.select().from(projectFonts).where(eq(projectFonts.projectId, projectId)).orderBy(projectFonts.createdAt);
+  }
+  async createProjectFont(font: InsertProjectFont) {
+    const [f] = await db.insert(projectFonts).values(font).returning();
+    return f;
+  }
+  async updateProjectFont(id: number, font: Partial<InsertProjectFont>) {
+    const [f] = await db.update(projectFonts).set(font).where(eq(projectFonts.id, id)).returning();
+    return f;
+  }
+  async deleteProjectFont(id: number) {
+    await db.delete(projectFonts).where(eq(projectFonts.id, id));
   }
 
   async getContentPieces(projectId?: number) {
