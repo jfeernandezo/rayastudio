@@ -1,6 +1,7 @@
+import { useRef, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  LayoutDashboard, FolderKanban, FileText, BookOpen, Zap, CalendarDays, Sparkles
+  LayoutDashboard, FolderKanban, FileText, BookOpen, Zap, CalendarDays, ImagePlus
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -18,14 +19,50 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const [logo, setLogo] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("raya-studio-logo");
+    if (saved) setLogo(saved);
+  }, []);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setLogo(dataUrl);
+      localStorage.setItem("raya-studio-logo", dataUrl);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-3 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-primary rounded-md flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-primary-foreground" />
-          </div>
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="w-8 h-8 rounded-md border border-dashed border-sidebar-border flex items-center justify-center overflow-hidden shrink-0 hover:border-primary transition-colors group"
+            title="Clique para adicionar a logo"
+            data-testid="button-upload-logo"
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoUpload}
+            />
+            {logo ? (
+              <img src={logo} alt="Logo" className="w-full h-full object-contain" />
+            ) : (
+              <ImagePlus className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+            )}
+          </button>
           <div>
             <p className="text-sm font-semibold text-sidebar-foreground">Raya Studio</p>
             <p className="text-xs text-muted-foreground">Agência Digital</p>
