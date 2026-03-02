@@ -16,6 +16,7 @@ import Prompts from "@/pages/prompts";
 import Calendar from "@/pages/calendar";
 import ApprovePage from "@/pages/approve";
 import Settings from "@/pages/settings";
+import AgentProfiles from "@/pages/agent-profiles";
 
 function AppLayout() {
   const style = {
@@ -47,6 +48,7 @@ function AppLayout() {
               <Route path="/knowledge" component={KnowledgeBase} />
               <Route path="/prompts" component={Prompts} />
               <Route path="/calendar" component={Calendar} />
+              <Route path="/agents" component={AgentProfiles} />
               <Route path="/settings" component={Settings} />
               <Route component={NotFound} />
             </Switch>
