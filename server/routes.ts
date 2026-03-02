@@ -337,33 +337,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- AI: CALENDAR GENERATOR ---
   app.post("/api/ai/calendar", async (req, res) => {
     try {
-      const { projectContext, period, platforms, formats, topics, instructions } = req.body;
+      const {
+        projectId, projectContext, period, platforms, topics, instructions,
+        objective, contentMix, postsPerWeek, knowledgeContext, brandRules
+      } = req.body;
+
+      // Fetch knowledge base if projectId provided and no knowledgeContext
+      let knowledgeText = knowledgeContext || "";
+      if (projectId && !knowledgeContext) {
+        try {
+          const items = await storage.getKnowledgeBase(Number(projectId));
+          if (items.length > 0) {
+            knowledgeText = items.map(i => `[${i.category || "geral"}] ${i.title}: ${i.content}`).join("\n");
+          }
+        } catch {}
+      }
+
+      const contentMixInstructions: Record<string, string> = {
+        equilibrado: "Distribua igualmente entre conteúdo educativo (40%), relacional/humanizado (30%) e promocional/conversão (30%).",
+        educativo: "Priorize conteúdo educativo e de autoridade (60%), complementado por relacional (25%) e promocional (15%). Foco em ensinar, desmistificar e agregar valor.",
+        promocional: "Distribua com foco em conversão e vendas (50%), educativo para preparar a audiência (30%) e relacional (20%). Use gatilhos como escassez, prova social e benefícios.",
+        relacional: "Priorize conteúdo humanizado e de conexão (55%), educativo leve (30%) e promocional sutil (15%). Foco em bastidores, histórias, valores e comunidade.",
+      };
+
+      const mixGuide = contentMixInstructions[contentMix] || contentMixInstructions.equilibrado;
+
+      const systemPrompt = `Você é uma Social Media Sênior e Copywriter com mais de 10 anos de experiência em estratégia de conteúdo digital para marcas. Você pensa de forma estratégica e criativa ao mesmo tempo.
+
+Ao criar um calendário, você aplica os seguintes princípios:
+
+ESTRATÉGIA DE CONTEÚDO:
+- Você define pilares de conteúdo com base no nicho, público-alvo e objetivos do cliente
+- Você entende o funil de consciência: Topo (descoberta/educação) → Meio (consideração/conexão) → Fundo (conversão/fidelização)
+- Você nunca começa uma quinzena com post promocional — você aquece a audiência primeiro
+- Você varia formatos estrategicamente: usa carrosseis para educar, reels para alcance, posts para posicionamento, stories para humanizar
+- Você considera a jornada da semana: Seg/Ter = posts de valor/educação, Qua/Qui = engajamento/relacional, Sex = inspiração/conversão leve
+
+COPYWRITING:
+- Você pensa em títulos com ganchos fortes (números, perguntas, afirmações contraintuitivas, "como fazer X sem Y")
+- Você usa frameworks como AIDA (Atenção, Interesse, Desejo, Ação) e PAS (Problema, Agitação, Solução)
+- Você adapta o tom e linguagem para cada plataforma: Instagram é mais emocional/visual, LinkedIn é mais profissional/reflexivo
+- Você sabe que o título do post deve parar o scroll — ele é o elemento mais importante
+
+BOAS PRÁTICAS POR PLATAFORMA:
+- Instagram: até 3-4 posts/semana, stories diários se possível, reels para crescimento orgânico, carrosseis para salvamentos
+- LinkedIn: 2-3 posts/semana, textos reflexivos com quebra de linha, autoridade e cases reais`;
+
+      const userPrompt = `Crie um calendário de conteúdo estratégico para a quinzena: ${period}
+
+CONTEXTO DO PROJETO:
+${projectContext}
+
+${knowledgeText ? `BASE DE CONHECIMENTO DO CLIENTE:\n${knowledgeText}\n` : ""}
+${brandRules ? `REGRAS DE MARCA:\n${brandRules}\n` : ""}
+
+OBJETIVO PRINCIPAL DA QUINZENA: ${objective || "Crescimento e posicionamento de marca"}
+
+DISTRIBUIÇÃO DE CONTEÚDO: ${mixGuide}
+
+PLATAFORMAS: ${platforms?.join(", ")}
+FREQUÊNCIA: ${postsPerWeek ? `${postsPerWeek} posts por semana por plataforma` : "3-4 posts por semana no Instagram, 2-3 no LinkedIn"}
+
+${topics ? `TEMAS/TÓPICOS SUGERIDOS: ${topics}` : ""}
+${instructions ? `INSTRUÇÕES ADICIONAIS: ${instructions}` : ""}
+
+IMPORTANTE:
+- Distribua os posts estrategicamente ao longo da quinzena (não aglomere tudo no início)
+- Varie os formatos (post, carrossel, story, reels) de forma inteligente
+- Cada post deve ter um objetivo claro dentro do funil
+- Use dias úteis preferencialmente para posts no LinkedIn
+- Considere o ritmo da semana ao distribuir os tipos de conteúdo
+
+Retorne um JSON com array "posts" onde cada post tem:
+- date: data no formato YYYY-MM-DD
+- title: título do post com gancho forte (que para o scroll)
+- platform: instagram ou linkedin
+- format: post, carrossel, story ou reels
+- topic: tópico/tema/pilar de conteúdo
+- objective: objetivo estratégico do post (ex: "educação - topo de funil", "conversão - fundo de funil", "engajamento - comunidade")
+- hook: o primeiro elemento que chamará atenção (primeira linha do texto ou descrição do visual)
+- contentPillar: pilar de conteúdo (ex: "autoridade", "humanização", "produto/serviço", "educação", "prova social")`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [{
-          role: "system",
-          content: `Você é um especialista em estratégia de conteúdo para redes sociais. 
-          Crie calendários de conteúdo quinzenais, relevantes e variados.`
-        }, {
-          role: "user",
-          content: `Crie um calendário de conteúdo quinzenal para o período ${period}.
-          Projeto: ${projectContext}
-          Plataformas: ${platforms?.join(", ")}
-          Formatos: ${formats?.join(", ")}
-          Tópicos sugeridos: ${topics || "variado"}
-          Instruções: ${instructions || ""}
-          
-          Retorne um JSON com array "posts" onde cada post tem:
-          - date: data no formato YYYY-MM-DD
-          - title: título do conteúdo
-          - platform: instagram ou linkedin
-          - format: post, story, carrossel ou reels
-          - topic: tópico/tema
-          - objective: objetivo do post (engajamento, vendas, educação, etc)`
-        }],
+        model: "gpt-4.1",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
         response_format: { type: "json_object" },
-        max_completion_tokens: 3000,
+        max_completion_tokens: 4000,
       });
 
       const result = JSON.parse(response.choices[0]?.message?.content || "{}");
