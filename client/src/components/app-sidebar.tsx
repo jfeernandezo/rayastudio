@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  LayoutDashboard, FolderKanban, FileText, BookOpen, Zap, CalendarDays, ImagePlus, Settings2
+  LayoutDashboard, FolderKanban, FileText, BookOpen, Zap, CalendarDays, ImagePlus, Settings2, Bot
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -13,6 +13,7 @@ const navItems = [
   { title: "Projetos", url: "/projects", icon: FolderKanban },
   { title: "Calendário", url: "/calendar", icon: CalendarDays },
   { title: "Templates", url: "/templates", icon: FileText },
+  { title: "Agentes", url: "/agents", icon: Bot },
   { title: "Prompts", url: "/prompts", icon: Zap },
   { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
 ];

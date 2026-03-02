@@ -138,6 +138,34 @@ export const insertPromptSchema = createInsertSchema(prompts).omit({ id: true, c
 export type InsertPrompt = z.infer<typeof insertPromptSchema>;
 export type Prompt = typeof prompts.$inferSelect;
 
+export const agentProfiles = pgTable("agent_profiles", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  personaDescription: text("persona_description"),
+  referencePersonas: text("reference_personas"),
+  toneCharacteristics: text("tone_characteristics").array().default([]),
+  voiceRegister: text("voice_register"),
+  deliveryDepth: text("delivery_depth").default("intermediário"),
+  contentObjectives: text("content_objectives").array().default([]),
+  contentPillars: text("content_pillars").array().default([]),
+  preferredFrameworks: text("preferred_frameworks").array().default([]),
+  targetAudience: text("target_audience"),
+  audiencePains: text("audience_pains"),
+  audienceDreams: text("audience_dreams"),
+  restrictions: text("restrictions").array().default([]),
+  forbiddenWords: text("forbidden_words").array().default([]),
+  hookStyle: text("hook_style"),
+  ctaStyle: text("cta_style"),
+  isGlobal: boolean("is_global").default(true),
+  createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+});
+
+export const insertAgentProfileSchema = createInsertSchema(agentProfiles).omit({ id: true, createdAt: true });
+export type InsertAgentProfile = z.infer<typeof insertAgentProfileSchema>;
+export type AgentProfile = typeof agentProfiles.$inferSelect;
+
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value"),

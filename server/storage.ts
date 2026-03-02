@@ -1,7 +1,7 @@
 import { eq, desc, and } from "drizzle-orm";
 import { db } from "./db";
 import {
-  users, projects, contentPieces, templates, knowledgeBase, prompts, conversations, messages, projectFonts, appSettings,
+  users, projects, contentPieces, templates, knowledgeBase, prompts, conversations, messages, projectFonts, appSettings, agentProfiles,
   type User, type InsertUser,
   type Project, type InsertProject,
   type ContentPiece, type InsertContentPiece,
@@ -10,6 +10,7 @@ import {
   type Prompt, type InsertPrompt,
   type Conversation, type Message,
   type ProjectFont, type InsertProjectFont,
+  type AgentProfile, type InsertAgentProfile,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -52,6 +53,12 @@ export interface IStorage {
   createPrompt(prompt: InsertPrompt): Promise<Prompt>;
   updatePrompt(id: number, prompt: Partial<InsertPrompt>): Promise<Prompt>;
   deletePrompt(id: number): Promise<void>;
+
+  getAgentProfiles(projectId?: number): Promise<AgentProfile[]>;
+  getAgentProfile(id: number): Promise<AgentProfile | undefined>;
+  createAgentProfile(profile: InsertAgentProfile): Promise<AgentProfile>;
+  updateAgentProfile(id: number, profile: Partial<InsertAgentProfile>): Promise<AgentProfile>;
+  deleteAgentProfile(id: number): Promise<void>;
 
   getConversations(): Promise<Conversation[]>;
   createConversation(title: string): Promise<Conversation>;
@@ -197,6 +204,30 @@ export class DatabaseStorage implements IStorage {
   }
   async deletePrompt(id: number) {
     await db.delete(prompts).where(eq(prompts.id, id));
+  }
+
+  async getAgentProfiles(projectId?: number) {
+    if (projectId !== undefined) {
+      return db.select().from(agentProfiles)
+        .where(eq(agentProfiles.projectId, projectId))
+        .orderBy(desc(agentProfiles.createdAt));
+    }
+    return db.select().from(agentProfiles).orderBy(desc(agentProfiles.createdAt));
+  }
+  async getAgentProfile(id: number) {
+    const [a] = await db.select().from(agentProfiles).where(eq(agentProfiles.id, id));
+    return a;
+  }
+  async createAgentProfile(profile: InsertAgentProfile) {
+    const [a] = await db.insert(agentProfiles).values(profile).returning();
+    return a;
+  }
+  async updateAgentProfile(id: number, profile: Partial<InsertAgentProfile>) {
+    const [a] = await db.update(agentProfiles).set(profile).where(eq(agentProfiles.id, id)).returning();
+    return a;
+  }
+  async deleteAgentProfile(id: number) {
+    await db.delete(agentProfiles).where(eq(agentProfiles.id, id));
   }
 
   async getConversations() {

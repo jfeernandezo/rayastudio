@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertProjectSchema, insertContentPieceSchema, insertTemplateSchema, insertKnowledgeBaseSchema, insertPromptSchema } from "@shared/schema";
+import { insertProjectSchema, insertContentPieceSchema, insertTemplateSchema, insertKnowledgeBaseSchema, insertPromptSchema, insertAgentProfileSchema } from "@shared/schema";
 import OpenAI from "openai";
 import multer from "multer";
 import { z } from "zod";
@@ -299,6 +299,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(500).json({ error: "Failed to delete prompt" }); }
   });
 
+  // --- AGENT PROFILES ---
+  app.get("/api/agent-profiles", async (req, res) => {
+    try {
+      const projectId = req.query.projectId ? Number(req.query.projectId) : undefined;
+      const result = await storage.getAgentProfiles(projectId);
+      res.json(result);
+    } catch (e) { res.status(500).json({ error: "Failed to fetch agent profiles" }); }
+  });
+
+  app.post("/api/agent-profiles", async (req, res) => {
+    try {
+      const data = insertAgentProfileSchema.parse(req.body);
+      const a = await storage.createAgentProfile(data);
+      res.status(201).json(a);
+    } catch (e) { res.status(400).json({ error: String(e) }); }
+  });
+
+  app.patch("/api/agent-profiles/:id", async (req, res) => {
+    try {
+      const a = await storage.updateAgentProfile(Number(req.params.id), req.body);
+      res.json(a);
+    } catch (e) { res.status(500).json({ error: "Failed to update agent profile" }); }
+  });
+
+  app.delete("/api/agent-profiles/:id", async (req, res) => {
+    try {
+      await storage.deleteAgentProfile(Number(req.params.id));
+      res.status(204).send();
+    } catch (e) { res.status(500).json({ error: "Failed to delete agent profile" }); }
+  });
+
   // --- AI: GENERATE CAPTION ---
   app.post("/api/ai/caption", async (req, res) => {
     try {
@@ -450,7 +481,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const {
         projectId, projectContext, period, platforms, topics, instructions,
-        objective, contentMix, postsPerWeek, knowledgeContext, brandRules
+        objective, contentMix, postsPerWeek, knowledgeContext, brandRules, agentProfile
       } = req.body;
 
       // Fetch knowledge base if projectId provided and no knowledgeContext
@@ -473,8 +504,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const mixGuide = contentMixInstructions[contentMix] || contentMixInstructions.equilibrado;
 
-      const systemPrompt = `Você é uma Social Media Sênior e Copywriter com mais de 10 anos de experiência em estratégia de conteúdo digital para marcas. Você pensa de forma estratégica e criativa ao mesmo tempo.
+      const agentProfileContext = agentProfile ? `
+PERFIL DO AGENTE DE SOCIAL MEDIA:
+${agentProfile.personaDescription ? `Identidade: ${agentProfile.personaDescription}` : ""}
+${agentProfile.referencePersonas ? `Referências de estilo: ${agentProfile.referencePersonas}` : ""}
+${agentProfile.toneCharacteristics?.length ? `Tom de voz: ${agentProfile.toneCharacteristics.join(", ")}` : ""}
+${agentProfile.voiceRegister ? `Registro de voz: ${agentProfile.voiceRegister}` : ""}
+${agentProfile.deliveryDepth ? `Nível de profundidade: ${agentProfile.deliveryDepth}` : ""}
+${agentProfile.contentObjectives?.length ? `Objetivos de conteúdo prioritários: ${agentProfile.contentObjectives.join(", ")}` : ""}
+${agentProfile.contentPillars?.length ? `Pilares de conteúdo: ${agentProfile.contentPillars.join(", ")}` : ""}
+${agentProfile.preferredFrameworks?.length ? `Frameworks a aplicar: ${agentProfile.preferredFrameworks.join(", ")}` : ""}
+${agentProfile.targetAudience ? `Público-alvo: ${agentProfile.targetAudience}` : ""}
+${agentProfile.audiencePains ? `Dores do público: ${agentProfile.audiencePains}` : ""}
+${agentProfile.audienceDreams ? `Sonhos/desejos do público: ${agentProfile.audienceDreams}` : ""}
+${agentProfile.hookStyle ? `Estilo de gancho preferido: ${agentProfile.hookStyle}` : ""}
+${agentProfile.ctaStyle ? `Estilo de CTA preferido: ${agentProfile.ctaStyle}` : ""}
+${agentProfile.restrictions?.length ? `RESTRIÇÕES - NUNCA FAZER: ${agentProfile.restrictions.join("; ")}` : ""}
+${agentProfile.forbiddenWords?.length ? `Palavras proibidas: ${agentProfile.forbiddenWords.join(", ")}` : ""}
+`.trim() : "";
 
+      const systemPrompt = `Você é uma Social Media Sênior e Copywriter com mais de 10 anos de experiência em estratégia de conteúdo digital para marcas. Você pensa de forma estratégica e criativa ao mesmo tempo.
+${agentProfileContext ? `\n${agentProfileContext}\n` : ""}
 Ao criar um calendário, você aplica os seguintes princípios:
 
 ESTRATÉGIA DE CONTEÚDO:
