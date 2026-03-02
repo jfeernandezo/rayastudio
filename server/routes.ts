@@ -92,6 +92,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(500).json({ error: "Failed to delete content" }); }
   });
 
+  // Generate approval share link for a content piece
+  app.post("/api/content/:id/share", async (req, res) => {
+    try {
+      const piece = await storage.getContentPiece(Number(req.params.id));
+      if (!piece) return res.status(404).json({ error: "Content not found" });
+      const updated = piece.approvalToken ? piece : await storage.generateApprovalToken(Number(req.params.id));
+      res.json({ token: updated.approvalToken });
+    } catch (e) { res.status(500).json({ error: "Failed to generate link" }); }
+  });
+
+  // Public approval routes (no auth required)
+  app.get("/api/approve/:token", async (req, res) => {
+    try {
+      const piece = await storage.getContentByApprovalToken(req.params.token);
+      if (!piece) return res.status(404).json({ error: "Link inválido ou expirado" });
+      const project = await storage.getProject(piece.projectId);
+      res.json({ content: piece, project });
+    } catch (e) { res.status(500).json({ error: "Failed to fetch content" }); }
+  });
+
+  app.post("/api/approve/:token", async (req, res) => {
+    try {
+      const { action, comment } = req.body;
+      const piece = await storage.getContentByApprovalToken(req.params.token);
+      if (!piece) return res.status(404).json({ error: "Link inválido" });
+      if (action === "approve") {
+        const updated = await storage.updateContentPiece(piece.id, { status: "approved", approvalComment: null });
+        res.json(updated);
+      } else if (action === "revision") {
+        const updated = await storage.updateContentPiece(piece.id, { status: "review", approvalComment: comment || "" });
+        res.json(updated);
+      } else {
+        res.status(400).json({ error: "Ação inválida" });
+      }
+    } catch (e) { res.status(500).json({ error: "Failed to process action" }); }
+  });
+
   // --- TEMPLATES ---
   app.get("/api/templates", async (req, res) => {
     try {

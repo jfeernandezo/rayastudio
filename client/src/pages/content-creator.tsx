@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Sparkles, Image, Upload, Loader2, Save, CheckCircle, Copy, Wand2, RefreshCw, BookOpen, Zap } from "lucide-react";
+import { ArrowLeft, Sparkles, Image, Upload, Loader2, Save, CheckCircle, Copy, Wand2, RefreshCw, BookOpen, Zap, Share2 } from "lucide-react";
 import type { Project, ContentPiece, Template, KnowledgeBase, Prompt } from "@shared/schema";
 
 const statusOptions = [
@@ -42,8 +42,11 @@ export default function ContentCreator() {
   const { data: content, isLoading } = useQuery<ContentPiece>({
     queryKey: ["/api/content", contentId],
     enabled: !!contentId,
-    select: (data) => { setForm(data); return data; },
   });
+
+  useEffect(() => {
+    if (content) setForm(content);
+  }, [content?.id]);
   const { data: templates = [] } = useQuery<Template[]>({ queryKey: ["/api/templates"] });
   const { data: knowledge = [] } = useQuery<KnowledgeBase[]>({
     queryKey: ["/api/knowledge", "project", id],
@@ -58,6 +61,24 @@ export default function ContentCreator() {
     mutationFn: () => apiRequest("PATCH", `/api/content/${contentId}`, form),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/content"] }); setSaved(true); setTimeout(() => setSaved(false), 2000); },
     onError: () => toast({ title: "Erro ao salvar", variant: "destructive" }),
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/content/${contentId}/share`, { method: "POST" });
+      if (!res.ok) throw new Error("Erro");
+      return res.json() as Promise<{ token: string }>;
+    },
+    onSuccess: ({ token }) => {
+      const url = `${window.location.origin}/approve/${token}`;
+      navigator.clipboard.writeText(url).then(() => {
+        toast({ title: "Link copiado!", description: "Compartilhe com o cliente para aprovação." });
+      }).catch(() => {
+        toast({ title: "Link gerado", description: url });
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
+    },
+    onError: () => toast({ title: "Erro ao gerar link", variant: "destructive" }),
   });
 
   const updateField = (field: keyof ContentPiece, value: any) => {
@@ -181,6 +202,19 @@ export default function ContentCreator() {
             {statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        {contentId && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => shareMutation.mutate()}
+            disabled={shareMutation.isPending}
+            data-testid="button-share-approval"
+            title="Gerar link de aprovação para o cliente"
+          >
+            {shareMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+            <span className="hidden sm:inline ml-1.5">Compartilhar</span>
+          </Button>
+        )}
         <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-content">
           {saved ? <><CheckCircle className="w-4 h-4 mr-1" /> Salvo</> : saveMutation.isPending ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Salvando</> : <><Save className="w-4 h-4 mr-1" /> Salvar</>}
         </Button>
