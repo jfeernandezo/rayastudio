@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  LayoutDashboard, FolderKanban, FileText, BookOpen, Zap, CalendarDays, ImagePlus, Settings2, Bot
+  LayoutDashboard, Briefcase, CalendarDays, LayoutTemplate,
+  BrainCircuit, Lightbulb, Library, Settings2, ImagePlus, Sparkles
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -10,12 +11,12 @@ import {
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Projetos", url: "/projects", icon: FolderKanban },
+  { title: "Projetos", url: "/projects", icon: Briefcase },
   { title: "Calendário", url: "/calendar", icon: CalendarDays },
-  { title: "Templates", url: "/templates", icon: FileText },
-  { title: "Agentes", url: "/agents", icon: Bot },
-  { title: "Prompts", url: "/prompts", icon: Zap },
-  { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
+  { title: "Templates", url: "/templates", icon: LayoutTemplate },
+  { title: "Agentes", url: "/agents", icon: BrainCircuit },
+  { title: "Prompts", url: "/prompts", icon: Lightbulb },
+  { title: "Base de Conhecimento", url: "/knowledge", icon: Library },
 ];
 
 const bottomItems = [
@@ -54,28 +55,23 @@ export function AppSidebar() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => fileRef.current?.click()}
-            className="w-9 h-9 rounded-2xl border border-orange-200 dark:border-orange-900/50 flex items-center justify-center overflow-hidden shrink-0 hover:border-primary/60 transition-all group bg-orange-50 dark:bg-orange-950/30"
+            className="w-9 h-9 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 transition-all group
+              bg-gradient-to-br from-orange-400 to-orange-600
+              shadow-[0_2px_8px_rgba(249,115,22,0.35),0_0_0_1px_rgba(249,115,22,0.15),inset_0_1px_0_rgba(255,255,255,0.3)]
+              hover:shadow-[0_4px_14px_rgba(249,115,22,0.45),0_0_0_1px_rgba(249,115,22,0.2),inset_0_1px_0_rgba(255,255,255,0.3)]"
             title="Clique para adicionar a logo"
             data-testid="button-upload-logo"
           >
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleLogoUpload}
-            />
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
             {logo ? (
               <img src={logo} alt="Logo" className="w-full h-full object-contain" />
             ) : (
-              <div className="flex items-center justify-center w-full h-full">
-                <ImagePlus className="w-3.5 h-3.5 text-primary group-hover:scale-110 transition-transform" />
-              </div>
+              <Sparkles className="w-4 h-4 text-white drop-shadow-sm" />
             )}
           </button>
           <div className="leading-tight">
-            <p className="text-sm font-bold text-foreground tracking-tight">Raya Studio</p>
-            <p className="text-[10.5px] text-muted-foreground">Creative AI Platform</p>
+            <p className="text-[13.5px] font-bold text-foreground tracking-tight">Raya Studio</p>
+            <p className="text-[10.5px] text-muted-foreground leading-none mt-0.5">Creative AI Platform</p>
           </div>
         </div>
       </SidebarHeader>
@@ -90,15 +86,22 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <Link href={item.url}>
                       <div
-                        className={`flex items-center gap-3 px-3 h-9 rounded-xl cursor-pointer transition-all duration-150 select-none
+                        className={`flex items-center gap-2.5 px-3 h-9 rounded-xl cursor-pointer select-none
+                          transition-all duration-200 ease-out group
                           ${active
-                            ? "bg-primary text-white font-medium sidebar-active-glow"
-                            : "text-muted-foreground hover:text-foreground hover:bg-orange-50/80 dark:hover:bg-orange-950/20"
+                            ? "sidebar-active-card text-foreground font-semibold"
+                            : "text-muted-foreground hover:text-foreground hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
                           }`}
                         data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                       >
-                        <item.icon className={`w-4 h-4 shrink-0 ${active ? "text-white" : ""}`} />
-                        <span className="text-[13px] leading-none">{item.title}</span>
+                        <item.icon
+                          className={`w-4 h-4 shrink-0 transition-colors duration-200
+                            ${active ? "text-primary" : "group-hover:text-foreground"}`}
+                        />
+                        <span className="text-[13px] leading-none flex-1">{item.title}</span>
+                        {active && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 animate-pulse" />
+                        )}
                       </div>
                     </Link>
                   </SidebarMenuItem>
@@ -110,7 +113,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="px-3 py-3">
-        <div className="w-full h-px bg-border/60 mb-2" />
+        <div className="w-full h-px bg-border/70 mb-2" />
         <SidebarMenu className="gap-0.5">
           {bottomItems.map((item) => {
             const active = isActive(item.url);
@@ -118,15 +121,17 @@ export function AppSidebar() {
               <SidebarMenuItem key={item.title}>
                 <Link href={item.url}>
                   <div
-                    className={`flex items-center gap-3 px-3 h-9 rounded-xl cursor-pointer transition-all duration-150 select-none
+                    className={`flex items-center gap-2.5 px-3 h-9 rounded-xl cursor-pointer select-none
+                      transition-all duration-200 ease-out group
                       ${active
-                        ? "bg-primary text-white font-medium sidebar-active-glow"
-                        : "text-muted-foreground hover:text-foreground hover:bg-orange-50/80 dark:hover:bg-orange-950/20"
+                        ? "sidebar-active-card text-foreground font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
                       }`}
                     data-testid={`nav-${item.title.toLowerCase()}`}
                   >
-                    <item.icon className={`w-4 h-4 shrink-0 ${active ? "text-white" : ""}`} />
-                    <span className="text-[13px] leading-none">{item.title}</span>
+                    <item.icon className={`w-4 h-4 shrink-0 ${active ? "text-primary" : "group-hover:text-foreground"}`} />
+                    <span className="text-[13px] leading-none flex-1">{item.title}</span>
+                    {active && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
                   </div>
                 </Link>
               </SidebarMenuItem>
@@ -134,7 +139,7 @@ export function AppSidebar() {
           })}
         </SidebarMenu>
         <div className="px-2 pt-2">
-          <p className="text-[10px] text-muted-foreground/40">v1.0 · Raya Studio</p>
+          <p className="text-[10px] text-muted-foreground/35">v1.0 · Raya Studio</p>
         </div>
       </SidebarFooter>
     </Sidebar>
