@@ -77,6 +77,10 @@ export default function ContentCreator() {
   const [aiModel, setAiModelRaw] = useState(() => localStorage.getItem("raya_ai_model") || "gpt-4.1");
   const setAiProvider = (v: string) => { localStorage.setItem("raya_ai_provider", v); setAiProviderRaw(v); };
   const setAiModel = (v: string) => { localStorage.setItem("raya_ai_model", v); setAiModelRaw(v); };
+  const [imgProvider, setImgProviderRaw] = useState(() => localStorage.getItem("raya_img_provider") || "openai");
+  const [imgModel, setImgModelRaw] = useState(() => localStorage.getItem("raya_img_model") || "gpt-image-1");
+  const setImgProvider = (v: string) => { localStorage.setItem("raya_img_provider", v); setImgProviderRaw(v); };
+  const setImgModel = (v: string) => { localStorage.setItem("raya_img_model", v); setImgModelRaw(v); };
   const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
   const [selectedDesignAgent, setSelectedDesignAgent] = useState<string>("none");
   const [generatingCaption, setGeneratingCaption] = useState(false);
@@ -105,8 +109,16 @@ export default function ContentCreator() {
     queryKey: ["/api/ai/models"],
     staleTime: 5 * 60 * 1000,
   });
-  const availableProviders = Object.keys(aiModels).filter(p => aiModels[p]?.length > 0);
+  const availableProviders = Object.keys(aiModels).filter(p => p !== "gemini_image" && aiModels[p]?.length > 0);
   const modelsForProvider = aiModels[aiProvider] || [];
+  const availableImageProviders: { id: string; label: string }[] = [
+    { id: "openai", label: "OpenAI" },
+    ...(aiModels.gemini_image?.length ? [{ id: "gemini", label: "Gemini" }] : []),
+  ];
+  const imageModelsForProvider =
+    imgProvider === "gemini"
+      ? (aiModels.gemini_image || [{ id: "gemini-2.0-flash-preview-image-generation", name: "Gemini 2.0 Flash Preview" }])
+      : [{ id: "gpt-image-1", name: "gpt-image-1" }];
 
   const { data: templates = [] } = useQuery<Template[]>({ queryKey: ["/api/templates"] });
   const { data: knowledge = [] } = useQuery<KnowledgeBase[]>({
@@ -223,6 +235,8 @@ export default function ContentCreator() {
           format: form.format,
           brandColors: (project as any)?.brandColors,
           designBrief: (project as any)?.designBrief,
+          provider: imgProvider,
+          model: imgModel,
           designAgent: designAgent ? {
             visualMood: designAgent.visualMood,
             colorApproach: designAgent.colorApproach,
@@ -237,7 +251,8 @@ export default function ContentCreator() {
       });
       const data = await res.json();
       if (data.b64_json) {
-        const imageUrl = `data:image/png;base64,${data.b64_json}`;
+        const mime = data.mimeType || "image/png";
+        const imageUrl = `data:${mime};base64,${data.b64_json}`;
         updateField("imageUrl", imageUrl);
         toast({ title: "Imagem gerada!" });
       }
@@ -575,6 +590,49 @@ export default function ContentCreator() {
                   className="resize-none"
                   data-testid="input-image-prompt"
                 />
+              </div>
+
+              {/* Image provider/model selector */}
+              <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-1.5">
+                <Label className="text-xs flex items-center gap-1 text-muted-foreground">
+                  <Cpu className="w-3 h-3" /> Modelo de Geração de Imagem
+                </Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={imgProvider}
+                    onValueChange={(v) => {
+                      setImgProvider(v);
+                      const firstModel = v === "gemini"
+                        ? (aiModels.gemini_image?.[0]?.id || "gemini-2.0-flash-preview-image-generation")
+                        : "gpt-image-1";
+                      setImgModel(firstModel);
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-24 shrink-0" data-testid="select-img-provider">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableImageProviders.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={imgModel} onValueChange={setImgModel}>
+                    <SelectTrigger className="h-7 text-xs flex-1 font-mono" data-testid="select-img-model">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {imageModelsForProvider.map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.id}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {imgProvider === "gemini" && !aiModels.gemini_image?.length && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    Configure a chave Gemini em Configurações → IA para habilitar.
+                  </p>
+                )}
               </div>
 
               <Button onClick={handleGenerateImage} disabled={generatingImage || !form.imagePrompt} size="sm" className="w-full" variant="outline" data-testid="button-generate-image-ai">
