@@ -27,10 +27,14 @@ function AppLayout() {
       <div className="flex h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center gap-2 px-4 py-2 border-b border-border bg-background h-12 shrink-0">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          <header className="flex items-center gap-2 px-4 border-b border-border bg-card h-12 shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-foreground" />
             <div className="flex-1" />
-            <span className="text-xs text-muted-foreground font-medium">Raya Studio</span>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                <span className="text-[11px] font-bold text-primary">R</span>
+              </div>
+            </div>
           </header>
           <main className="flex-1 overflow-auto">
             <Switch>
