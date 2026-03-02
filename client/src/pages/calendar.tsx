@@ -328,7 +328,7 @@ export default function Calendar() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem agente — usar configuração padrão</SelectItem>
-                  {agentProfiles.map(a => (
+                  {agentProfiles.filter(a => !a.agentType || a.agentType === "estrategia").map(a => (
                     <SelectItem key={a.id} value={String(a.id)}>
                       {a.name}{a.description ? ` — ${a.description}` : ""}
                     </SelectItem>
