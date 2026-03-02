@@ -17,9 +17,10 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseIS
 import { ptBR } from "date-fns/locale";
 
 const statusColors: Record<string, string> = {
-  draft: "bg-muted",
-  review: "bg-amber-200 dark:bg-amber-900/50",
-  approved: "bg-green-200 dark:bg-green-900/50",
+  draft:     "bg-slate-200 dark:bg-slate-700/50",
+  review:    "bg-amber-200 dark:bg-amber-900/50",
+  approved:  "bg-green-200 dark:bg-green-900/50",
+  scheduled: "bg-violet-200 dark:bg-violet-900/50",
   published: "bg-blue-200 dark:bg-blue-900/50",
 };
 
@@ -28,7 +29,10 @@ const platformDot: Record<string, string> = {
   linkedin: "bg-blue-600",
 };
 
-const statusLabels: Record<string, string> = { draft: "Rascunho", review: "Revisão", approved: "Aprovado", published: "Publicado" };
+const statusLabels: Record<string, string> = {
+  draft: "À Fazer", review: "Em Revisão", approved: "Aprovado",
+  scheduled: "Agendado", published: "Publicado",
+};
 
 const objectiveOptions = [
   { value: "crescimento", label: "Crescimento de audiência" },
@@ -239,10 +243,11 @@ export default function Calendar() {
                 )}
               </div>
 
-              <div className="flex items-center gap-4 mt-4">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-muted border" /><span className="text-xs text-muted-foreground">Rascunho</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-200 dark:bg-amber-900/50" /><span className="text-xs text-muted-foreground">Revisão</span></div>
+              <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 mt-4">
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-slate-200 dark:bg-slate-700/50 border border-border" /><span className="text-xs text-muted-foreground">À Fazer</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-200 dark:bg-amber-900/50" /><span className="text-xs text-muted-foreground">Em Revisão</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-green-200 dark:bg-green-900/50" /><span className="text-xs text-muted-foreground">Aprovado</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-violet-200 dark:bg-violet-900/50" /><span className="text-xs text-muted-foreground">Agendado</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-blue-200 dark:bg-blue-900/50" /><span className="text-xs text-muted-foreground">Publicado</span></div>
               </div>
             </CardContent>
@@ -295,7 +300,10 @@ export default function Calendar() {
             <CardContent className="p-3">
               <p className="text-xs font-medium text-foreground mb-2">Resumo do mês</p>
               <div className="space-y-1">
-                {Object.entries({ draft: "Rascunho", review: "Revisão", approved: "Aprovado", published: "Publicado" }).map(([status, label]) => {
+                {Object.entries({
+                  draft: "À Fazer", review: "Em Revisão", approved: "Aprovado",
+                  scheduled: "Agendado", published: "Publicado"
+                }).map(([status, label]) => {
                   const count = content.filter(c => c.status === status && c.scheduledDate && c.scheduledDate.startsWith(format(currentDate, "yyyy-MM"))).length;
                   return (
                     <div key={status} className="flex items-center justify-between">
