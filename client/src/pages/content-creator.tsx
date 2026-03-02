@@ -358,7 +358,8 @@ export default function ContentCreator() {
                   <CardContent className="p-3 space-y-2">
                     <p className="text-xs font-medium text-foreground">Análise da Imagem</p>
                     {analysisResult.description && <p className="text-xs text-muted-foreground"><span className="font-medium">Descrição:</span> {analysisResult.description}</p>}
-                    {analysisResult.style && <p className="text-xs text-muted-foreground"><span className="font-medium">Estilo:</span> {analysisResult.style}</p>}
+                    {analysisResult.style?.mood && <p className="text-xs text-muted-foreground"><span className="font-medium">Tom:</span> {analysisResult.style.mood}</p>}
+                    {analysisResult.style?.composition && <p className="text-xs text-muted-foreground"><span className="font-medium">Composição:</span> {analysisResult.style.composition}</p>}
                     {analysisResult.targetAudience && <p className="text-xs text-muted-foreground"><span className="font-medium">Público:</span> {analysisResult.targetAudience}</p>}
                     {analysisResult.contentType && <Badge variant="outline" className="text-xs">{analysisResult.contentType}</Badge>}
                   </CardContent>
