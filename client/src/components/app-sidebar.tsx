@@ -27,7 +27,7 @@ export function AppSidebar() {
             <Sparkles className="w-4 h-4 text-primary-foreground" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-sidebar-foreground">ContentFlow</p>
+            <p className="text-sm font-semibold text-sidebar-foreground">Raya Studio</p>
             <p className="text-xs text-muted-foreground">Agência Digital</p>
           </div>
         </div>

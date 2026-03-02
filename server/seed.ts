@@ -14,7 +14,7 @@ export async function seedDatabase() {
     rules: "Não usar jargão muito técnico. Evitar posts genéricos sem substância.",
     niche: ["tecnologia", "desenvolvimento", "IA", "vibe coding"],
     formats: ["post", "carrossel", "story"],
-    brandColors: ["#6B46C1", "#9F7AEA", "#E9D8FD"],
+    brandColors: { dominant: "#6B46C1", secondary: "#9F7AEA", accent: "#E9D8FD" },
   }).returning();
 
   const [proj2] = await db.insert(projects).values({
@@ -25,7 +25,7 @@ export async function seedDatabase() {
     rules: "Sempre mostrar o portfólio. Evitar textos longos no feed.",
     niche: ["design", "branding", "criatividade", "marketing visual"],
     formats: ["post", "carrossel", "reels"],
-    brandColors: ["#F6AD55", "#ED8936", "#FFF5EB"],
+    brandColors: { dominant: "#F6AD55", secondary: "#ED8936", accent: "#FFF5EB" },
   }).returning();
 
   await db.insert(contentPieces).values([

@@ -30,7 +30,7 @@ export default function Projects() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: { name: "", description: "", clientName: "", brandColors: [], niche: [], formats: [], rules: "", instructions: "" },
+    defaultValues: { name: "", description: "", clientName: "", brandColors: null, niche: [], formats: [], rules: "", instructions: "" },
   });
 
   const createMutation = useMutation({
