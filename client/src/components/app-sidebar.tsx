@@ -43,33 +43,30 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-3 border-b border-sidebar-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="w-9 h-9 rounded-md border border-dashed border-sidebar-border flex items-center justify-center overflow-hidden shrink-0 hover:border-primary transition-colors group"
-              title="Clique para adicionar a logo"
-              data-testid="button-upload-logo"
-            >
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleLogoUpload}
-              />
-              {logo ? (
-                <img src={logo} alt="Logo" className="w-full h-full object-contain" />
-              ) : (
-                <ImagePlus className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
-              )}
-            </button>
-            <div className="leading-none">
-              <p className="text-sm font-bold text-sidebar-foreground tracking-tight">Raya</p>
-              <p className="text-[11px] font-light text-muted-foreground tracking-wide">Creative Studio</p>
-            </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="w-9 h-9 rounded-md border border-dashed border-sidebar-border flex items-center justify-center overflow-hidden shrink-0 hover:border-primary transition-colors group"
+            title="Clique para adicionar a logo"
+            data-testid="button-upload-logo"
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoUpload}
+            />
+            {logo ? (
+              <img src={logo} alt="Logo" className="w-full h-full object-contain" />
+            ) : (
+              <ImagePlus className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+            )}
+          </button>
+          <div className="leading-none">
+            <p className="text-sm font-bold text-sidebar-foreground tracking-tight">Raya</p>
+            <p className="text-[11px] font-light text-muted-foreground tracking-wide">Creative Studio</p>
           </div>
-          <span className="text-xs font-semibold text-muted-foreground/60 tracking-wide">Raya Studio</span>
         </div>
       </SidebarHeader>
 
