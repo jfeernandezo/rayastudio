@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -7,20 +7,65 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw, BookOpen, Zap, Share2, ImageIcon, Layers, Palette } from "lucide-react";
+import {
+  ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw,
+  BookOpen, Zap, Share2, ImageIcon, Layers, Palette, Download, AlertCircle, Link2, Send
+} from "lucide-react";
 import type { Project, ContentPiece, Template, KnowledgeBase, Prompt, AgentProfile } from "@shared/schema";
 
 const statusOptions = [
-  { value: "draft", label: "Rascunho" },
-  { value: "review", label: "Em Revisão" },
-  { value: "approved", label: "Aprovado" },
+  { value: "draft",     label: "À Fazer" },
+  { value: "review",    label: "Em Revisão" },
+  { value: "approved",  label: "Aprovado" },
+  { value: "scheduled", label: "Agendado" },
   { value: "published", label: "Publicado" },
 ];
+
+const PLATFORM_SIZES: Record<string, { label: string; width: number; height: number }[]> = {
+  instagram: [
+    { label: "Post Quadrado (1080×1080)", width: 1080, height: 1080 },
+    { label: "Story / Reels (1080×1920)", width: 1080, height: 1920 },
+    { label: "Carrossel (1080×1080)",     width: 1080, height: 1080 },
+    { label: "Landscape (1080×566)",      width: 1080, height: 566 },
+  ],
+  linkedin: [
+    { label: "Post Landscape (1200×627)", width: 1200, height: 627 },
+    { label: "Post Quadrado (1080×1080)", width: 1080, height: 1080 },
+    { label: "Banner (1128×191)",         width: 1128, height: 191 },
+  ],
+};
+
+function downloadImage(src: string, format: "png" | "jpg", width: number, height: number, filename: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  const img = document.createElement("img");
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    const scale = Math.min(width / img.naturalWidth, height / img.naturalHeight);
+    const sw = img.naturalWidth * scale;
+    const sh = img.naturalHeight * scale;
+    const sx = (width - sw) / 2;
+    const sy = (height - sh) / 2;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, sx, sy, sw, sh);
+    const mime = format === "jpg" ? "image/jpeg" : "image/png";
+    const quality = format === "jpg" ? 0.92 : 1.0;
+    const dataUrl = canvas.toDataURL(mime, quality);
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `${filename}.${format === "jpg" ? "jpg" : "png"}`;
+    a.click();
+  };
+  img.src = src;
+}
 
 export default function ContentCreator() {
   const { id, contentId } = useParams<{ id: string; contentId: string }>();
@@ -35,6 +80,12 @@ export default function ContentCreator() {
 
   const [form, setForm] = useState<Partial<ContentPiece>>({});
   const [saved, setSaved] = useState(false);
+
+  const [exportFormat, setExportFormat] = useState<"png" | "jpg">("png");
+  const [exportSizeIdx, setExportSizeIdx] = useState(0);
+
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
 
   const { data: project } = useQuery<Project>({ queryKey: ["/api/projects", id] });
   const { data: content, isLoading } = useQuery<ContentPiece>({
@@ -59,12 +110,21 @@ export default function ContentCreator() {
 
   const designAgents = agentProfiles.filter(a => a.agentType === "criacao");
   const selectedDesignAgentObj = designAgents.find(a => a.id === Number(selectedDesignAgent));
-
   const selectedTemplateObj = templates.find(t => t.id === Number(selectedTemplate));
+  const templateSlideCount = (selectedTemplateObj as any)?.slideCount as number | null | undefined;
+
+  const platform = form.platform || "instagram";
+  const platformSizes = PLATFORM_SIZES[platform] || PLATFORM_SIZES.instagram;
+  const exportSize = platformSizes[Math.min(exportSizeIdx, platformSizes.length - 1)];
 
   const saveMutation = useMutation({
-    mutationFn: () => apiRequest("PATCH", `/api/content/${contentId}`, form),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/content"] }); setSaved(true); setTimeout(() => setSaved(false), 2000); },
+    mutationFn: (overrides?: Partial<ContentPiece>) =>
+      apiRequest("PATCH", `/api/content/${contentId}`, { ...form, ...overrides }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
     onError: () => toast({ title: "Erro ao salvar", variant: "destructive" }),
   });
 
@@ -75,16 +135,19 @@ export default function ContentCreator() {
       return res.json() as Promise<{ token: string }>;
     },
     onSuccess: ({ token }) => {
-      const url = `${window.location.origin}/approve/${token}`;
-      navigator.clipboard.writeText(url).then(() => {
-        toast({ title: "Link copiado!", description: "Compartilhe com o cliente para aprovação." });
-      }).catch(() => {
-        toast({ title: "Link gerado", description: url });
-      });
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
+      const url = `${window.location.origin}/approve/${token}`;
+      setShareUrl(url);
     },
     onError: () => toast({ title: "Erro ao gerar link", variant: "destructive" }),
   });
+
+  const handleSaveAndReview = async () => {
+    await saveMutation.mutateAsync({ status: "review" });
+    setForm(prev => ({ ...prev, status: "review" }));
+    const res = await shareMutation.mutateAsync();
+    setShareDialogOpen(true);
+  };
 
   const updateField = (field: keyof ContentPiece, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -93,15 +156,9 @@ export default function ContentCreator() {
   const handleTemplateChange = (value: string) => {
     setSelectedTemplate(value);
     const tmpl = templates.find(t => t.id === Number(value));
-    if (tmpl?.promptTemplate) {
-      updateField("imagePrompt", tmpl.promptTemplate);
-    }
-    if (tmpl?.format && tmpl.format !== "any") {
-      updateField("format", tmpl.format);
-    }
+    if (tmpl?.promptTemplate) updateField("imagePrompt", tmpl.promptTemplate);
+    if (tmpl?.format && tmpl.format !== "any") updateField("format", tmpl.format);
   };
-
-  const templateSlideCount = (selectedTemplateObj as any)?.slideCount as number | null | undefined;
 
   const handleGenerateCaption = async () => {
     setGeneratingCaption(true);
@@ -110,7 +167,6 @@ export default function ContentCreator() {
       const knowledgeContext = knowledge.map(k => `${k.title}: ${k.content}`).join("\n");
       const isCarousel = (form.format === "carrossel") || (template?.format === "carrossel");
       const slideCount = templateSlideCount;
-
       const res = await fetch("/api/ai/caption", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -194,8 +250,25 @@ export default function ContentCreator() {
     </div>
   );
 
+  const hasRevision = !!content?.approvalComment && content?.status === "review";
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
+
+      {/* ── Revision request banner ── */}
+      {hasRevision && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/15 animate-slide-up"
+          data-testid="revision-comment-banner"
+        >
+          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Alteração solicitada pelo cliente</p>
+            <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5 whitespace-pre-wrap">{content.approvalComment}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Header row ── */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild className="w-8 h-8">
           <Link href={`/projects/${id}`}><ArrowLeft className="w-4 h-4" /></Link>
@@ -211,35 +284,53 @@ export default function ContentCreator() {
           {project && <p className="text-xs text-muted-foreground">{project.name}</p>}
         </div>
         <Select value={form.status || "draft"} onValueChange={(v) => updateField("status", v)}>
-          <SelectTrigger className="w-32 h-8" data-testid="select-status">
+          <SelectTrigger className="w-36 h-8" data-testid="select-status">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
           </SelectContent>
         </Select>
+
+        {/* Save and send for review */}
         {contentId && (
           <Button
             size="sm"
             variant="outline"
-            onClick={() => shareMutation.mutate()}
-            disabled={shareMutation.isPending}
-            data-testid="button-share-approval"
-            title="Gerar link de aprovação para o cliente"
+            onClick={handleSaveAndReview}
+            disabled={saveMutation.isPending || shareMutation.isPending}
+            data-testid="button-save-and-review"
+            title="Salvar e enviar para aprovação do cliente"
+            className="gap-1.5"
           >
-            {shareMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
-            <span className="hidden sm:inline ml-1.5">Compartilhar</span>
+            {(saveMutation.isPending || shareMutation.isPending)
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Send className="w-4 h-4" />
+            }
+            <span className="hidden sm:inline">Enviar para Revisão</span>
           </Button>
         )}
-        <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-content">
-          {saved ? <><CheckCircle className="w-4 h-4 mr-1" /> Salvo</> : saveMutation.isPending ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Salvando</> : <><Save className="w-4 h-4 mr-1" /> Salvar</>}
+
+        <Button
+          size="sm"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+          data-testid="button-save-content"
+        >
+          {saved
+            ? <><CheckCircle className="w-4 h-4 mr-1" /> Salvo</>
+            : saveMutation.isPending
+              ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Salvando</>
+              : <><Save className="w-4 h-4 mr-1" /> Salvar</>
+          }
         </Button>
       </div>
 
+      {/* ── Platform / Format row ── */}
       <div className="grid md:grid-cols-2 gap-2 text-sm">
         <div className="flex items-center gap-2">
           <Label className="text-xs w-20 shrink-0">Plataforma</Label>
-          <Select value={form.platform || "instagram"} onValueChange={(v) => updateField("platform", v)}>
+          <Select value={form.platform || "instagram"} onValueChange={(v) => { updateField("platform", v); setExportSizeIdx(0); }}>
             <SelectTrigger className="h-8" data-testid="select-editor-platform"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="instagram">Instagram</SelectItem>
@@ -262,6 +353,7 @@ export default function ContentCreator() {
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
+        {/* ── LEFT: Caption / AI ── */}
         <div className="space-y-4">
           <Tabs defaultValue="caption">
             <TabsList className="w-full">
@@ -318,15 +410,9 @@ export default function ContentCreator() {
                   <div className="flex items-start gap-2 p-2 rounded-md border border-primary/20 bg-primary/5 mt-1">
                     {selectedTemplateObj.referenceImageUrl && (
                       <div className="relative shrink-0">
-                        <img
-                          src={selectedTemplateObj.referenceImageUrl}
-                          alt="Referência visual"
-                          className="w-12 h-12 object-cover rounded-sm"
-                        />
+                        <img src={selectedTemplateObj.referenceImageUrl} alt="Referência visual" className="w-12 h-12 object-cover rounded-sm" />
                         {templateSlideCount && (
-                          <span className="absolute -bottom-1 -right-1 text-[9px] font-bold bg-primary text-primary-foreground px-1 rounded-full">
-                            {templateSlideCount}
-                          </span>
+                          <span className="absolute -bottom-1 -right-1 text-[9px] font-bold bg-primary text-primary-foreground px-1 rounded-full">{templateSlideCount}</span>
                         )}
                       </div>
                     )}
@@ -343,11 +429,6 @@ export default function ContentCreator() {
                       </div>
                       {selectedTemplateObj.promptTemplate && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{selectedTemplateObj.promptTemplate.slice(0, 100)}...</p>
-                      )}
-                      {templateSlideCount && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          A legenda será estruturada com {templateSlideCount} slides e a imagem gerada como slide 1.
-                        </p>
                       )}
                     </div>
                   </div>
@@ -430,7 +511,7 @@ export default function ContentCreator() {
                 <Textarea
                   value={form.imagePrompt || ""}
                   onChange={(e) => updateField("imagePrompt", e.target.value)}
-                  placeholder={selectedTemplateObj?.promptTemplate ? "Prompt carregado do template — edite se necessário..." : "Descreva a imagem que quer gerar ou selecione um template com referência visual..."}
+                  placeholder={selectedTemplateObj?.promptTemplate ? "Prompt carregado do template — edite se necessário..." : "Descreva a imagem que quer gerar..."}
                   rows={3}
                   className="resize-none"
                   data-testid="input-image-prompt"
@@ -457,21 +538,96 @@ export default function ContentCreator() {
           </Tabs>
         </div>
 
+        {/* ── RIGHT: Image + Export ── */}
         <div className="space-y-4">
           <div className="space-y-2">
             <Label className="text-xs">Imagem</Label>
             {form.imageUrl ? (
-              <div className="relative rounded-md overflow-hidden border border-border">
-                <img src={form.imageUrl} alt="Gerada" className="w-full object-cover" style={{ maxHeight: "300px" }} />
-                <div className="absolute bottom-2 right-2 flex gap-1">
-                  <Button size="sm" variant="outline" className="h-7 text-xs bg-background/80" onClick={handleGenerateImage} disabled={generatingImage}>
-                    <RefreshCw className="w-3 h-3 mr-1" /> Regerar
-                  </Button>
+              <div className="space-y-3">
+                <div className="relative rounded-xl overflow-hidden border border-border shadow-xs">
+                  <img src={form.imageUrl} alt="Gerada" className="w-full object-cover" style={{ maxHeight: "320px" }} />
+                  <div className="absolute top-2 right-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs bg-background/90 backdrop-blur-sm"
+                      onClick={handleGenerateImage}
+                      disabled={generatingImage}
+                      data-testid="button-regenerate-image"
+                    >
+                      <RefreshCw className="w-3 h-3 mr-1" /> Refazer
+                    </Button>
+                  </div>
+                </div>
+
+                {/* ── Export panel ── */}
+                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3" data-testid="export-panel">
+                  <p className="text-xs font-semibold text-foreground">Exportar imagem</p>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Formato</Label>
+                      <div className="flex gap-1">
+                        {(["png", "jpg"] as const).map(f => (
+                          <button
+                            key={f}
+                            onClick={() => setExportFormat(f)}
+                            className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors
+                              ${exportFormat === f
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:border-muted-foreground"
+                              }`}
+                            data-testid={`button-format-${f}`}
+                          >
+                            {f.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Tamanho</Label>
+                      <Select
+                        value={String(exportSizeIdx)}
+                        onValueChange={(v) => setExportSizeIdx(Number(v))}
+                      >
+                        <SelectTrigger className="h-8 text-[11px]" data-testid="select-export-size">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {platformSizes.map((s, i) => (
+                            <SelectItem key={i} value={String(i)}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-muted-foreground">
+                      {exportSize.width}×{exportSize.height}px · {exportFormat.toUpperCase()}
+                    </p>
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => downloadImage(
+                        form.imageUrl!,
+                        exportFormat,
+                        exportSize.width,
+                        exportSize.height,
+                        (form.title || "post").toLowerCase().replace(/\s+/g, "-").slice(0, 40)
+                      )}
+                      data-testid="button-download-image"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Baixar
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
               <div
-                className="border-2 border-dashed border-border rounded-md p-8 flex flex-col items-center gap-2 cursor-pointer hover-elevate"
+                className="border-2 border-dashed border-border rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover-elevate"
                 onClick={handleGenerateImage}
                 data-testid="image-generate-zone"
               >
@@ -505,6 +661,42 @@ export default function ContentCreator() {
           )}
         </div>
       </div>
+
+      {/* ── Share dialog ── */}
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Link de aprovação gerado</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              O conteúdo foi movido para <span className="font-medium text-amber-600">Em Revisão</span>. Compartilhe o link abaixo com o cliente para aprovação.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                value={shareUrl}
+                readOnly
+                className="flex-1 text-xs font-mono h-9"
+                data-testid="input-share-url"
+              />
+              <Button
+                size="sm"
+                className="h-9 shrink-0"
+                onClick={() => {
+                  navigator.clipboard.writeText(shareUrl);
+                  toast({ title: "Link copiado!" });
+                }}
+                data-testid="button-copy-share-url"
+              >
+                <Link2 className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              O cliente poderá aprovar ou solicitar alterações neste link. Você será notificado no sistema.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
