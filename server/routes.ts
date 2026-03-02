@@ -440,36 +440,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
-    // Gemini (text + image models)
+    // Gemini — split into text models and image models
     const geminiKey = await storage.getSetting("ai_gemini_key");
     if (geminiKey) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`
+        const gResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}&pageSize=100`
         );
-        if (response.ok) {
-          const data = await response.json() as any;
-          const textModels = (data.models || [])
+        if (gResponse.ok) {
+          const data = await gResponse.json() as any;
+          const allModels = data.models || [];
+
+          // Text models: must have generateContent, must NOT have "image" in name
+          const textModels = allModels
             .filter((m: any) =>
               m.supportedGenerationMethods?.includes("generateContent") &&
               m.name.includes("gemini") &&
-              !m.name.includes("embedding") &&
-              !m.name.includes("image-generation")
+              !m.name.toLowerCase().includes("image") &&
+              !m.name.includes("embedding")
             )
             .map((m: any) => ({
               id: m.name.replace("models/", ""),
               name: m.displayName || m.name.replace("models/", ""),
             }));
           if (textModels.length > 0) result.gemini = textModels;
+
+          // Image models: must have generateContent AND have "image" in name
+          const imageModels = allModels
+            .filter((m: any) =>
+              m.supportedGenerationMethods?.includes("generateContent") &&
+              m.name.toLowerCase().includes("image") &&
+              !m.name.includes("embedding")
+            )
+            .map((m: any) => ({
+              id: m.name.replace("models/", ""),
+              name: m.displayName || m.name.replace("models/", ""),
+            }));
+          if (imageModels.length > 0) result.gemini_image = imageModels;
         }
       } catch (e) {
         console.error("Gemini models fetch error:", e);
       }
-      // Gemini image generation models (hardcoded — known image-capable endpoints)
-      result.gemini_image = [
-        { id: "gemini-2.0-flash-preview-image-generation", name: "Gemini 2.0 Flash Preview (Imagem)" },
-        { id: "gemini-2.0-flash-exp-image-generation", name: "Gemini 2.0 Flash Exp (Imagem)" },
-      ];
     }
 
     res.json(result);
