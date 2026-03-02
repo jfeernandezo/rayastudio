@@ -28,12 +28,15 @@ function AppLayout() {
       <div className="flex h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center gap-2 px-4 border-b border-border bg-card h-12 shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-            <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-foreground" />
+          <header className="flex items-center gap-2 px-4 bg-background/80 backdrop-blur-sm h-11 shrink-0 border-b border-border/60">
+            <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-foreground w-7 h-7 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-950/20 transition-colors" />
             <div className="flex-1" />
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-[11px] font-bold text-primary">R</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-card border border-border/60 shadow-xs">
+                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shrink-0">
+                  <span className="text-[9px] font-black text-white leading-none">R</span>
+                </div>
+                <span className="text-xs font-medium text-foreground hidden sm:block">Raya Studio</span>
               </div>
             </div>
           </header>
