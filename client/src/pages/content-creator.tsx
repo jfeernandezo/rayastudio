@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw, BookOpen, Zap, Share2, ImageIcon } from "lucide-react";
+import { ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw, BookOpen, Zap, Share2, ImageIcon, Layers } from "lucide-react";
 import type { Project, ContentPiece, Template, KnowledgeBase, Prompt } from "@shared/schema";
 
 const statusOptions = [
@@ -91,13 +91,21 @@ export default function ContentCreator() {
     if (tmpl?.promptTemplate) {
       updateField("imagePrompt", tmpl.promptTemplate);
     }
+    if (tmpl?.format && tmpl.format !== "any") {
+      updateField("format", tmpl.format);
+    }
   };
+
+  const templateSlideCount = (selectedTemplateObj as any)?.slideCount as number | null | undefined;
 
   const handleGenerateCaption = async () => {
     setGeneratingCaption(true);
     try {
       const template = selectedTemplateObj;
       const knowledgeContext = knowledge.map(k => `${k.title}: ${k.content}`).join("\n");
+      const isCarousel = (form.format === "carrossel") || (template?.format === "carrossel");
+      const slideCount = templateSlideCount;
+
       const res = await fetch("/api/ai/caption", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -109,6 +117,7 @@ export default function ContentCreator() {
           topic: aiTopic || form.title,
           tone: aiTone,
           knowledgeContext,
+          ...(isCarousel && slideCount ? { carouselSlides: slideCount } : {}),
         }),
       });
       const data = await res.json();
@@ -289,21 +298,40 @@ export default function ContentCreator() {
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedTemplateObj && (selectedTemplateObj.referenceImageUrl || selectedTemplateObj.promptTemplate) && (
+                {selectedTemplateObj && (selectedTemplateObj.referenceImageUrl || selectedTemplateObj.promptTemplate || templateSlideCount) && (
                   <div className="flex items-start gap-2 p-2 rounded-md border border-primary/20 bg-primary/5 mt-1">
                     {selectedTemplateObj.referenceImageUrl && (
-                      <img
-                        src={selectedTemplateObj.referenceImageUrl}
-                        alt="Referência visual"
-                        className="w-12 h-12 object-cover rounded-sm shrink-0"
-                      />
+                      <div className="relative shrink-0">
+                        <img
+                          src={selectedTemplateObj.referenceImageUrl}
+                          alt="Referência visual"
+                          className="w-12 h-12 object-cover rounded-sm"
+                        />
+                        {templateSlideCount && (
+                          <span className="absolute -bottom-1 -right-1 text-[9px] font-bold bg-primary text-primary-foreground px-1 rounded-full">
+                            {templateSlideCount}
+                          </span>
+                        )}
+                      </div>
                     )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-primary flex items-center gap-1">
-                        <ImageIcon className="w-3 h-3" /> Referência visual carregada
-                      </p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs font-medium text-primary flex items-center gap-1">
+                          <ImageIcon className="w-3 h-3" /> Referência visual carregada
+                        </p>
+                        {templateSlideCount && (
+                          <span className="inline-flex items-center gap-1 text-xs text-primary font-medium">
+                            <Layers className="w-3 h-3" /> {templateSlideCount} slides
+                          </span>
+                        )}
+                      </div>
                       {selectedTemplateObj.promptTemplate && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{selectedTemplateObj.promptTemplate.slice(0, 100)}...</p>
+                      )}
+                      {templateSlideCount && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          A legenda será estruturada com {templateSlideCount} slides e a imagem gerada como slide 1.
+                        </p>
                       )}
                     </div>
                   </div>
