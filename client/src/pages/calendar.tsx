@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, Sparkles, Loader2, ChevronLeft, ChevronRight, BookOpen, Bot } from "lucide-react";
+import { CalendarDays, Sparkles, Loader2, ChevronLeft, ChevronRight, BookOpen, Bot, Cpu } from "lucide-react";
 import type { ContentPiece, Project, AgentProfile } from "@shared/schema";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, addMonths, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -80,9 +80,21 @@ export default function Calendar() {
     instructions: "",
   });
 
+  const [aiProvider, setAiProviderRaw] = useState(() => localStorage.getItem("raya_ai_provider") || "openai");
+  const [aiModel, setAiModelRaw] = useState(() => localStorage.getItem("raya_ai_model") || "gpt-4.1");
+  const setAiProvider = (v: string) => { localStorage.setItem("raya_ai_provider", v); setAiProviderRaw(v); };
+  const setAiModel = (v: string) => { localStorage.setItem("raya_ai_model", v); setAiModelRaw(v); };
+
   const { data: content = [], isLoading } = useQuery<ContentPiece[]>({ queryKey: ["/api/content"] });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
   const { data: agentProfiles = [] } = useQuery<AgentProfile[]>({ queryKey: ["/api/agent-profiles"] });
+  const { data: aiModels = {} } = useQuery<Record<string, { id: string; name: string }[]>>({
+    queryKey: ["/api/ai/models"],
+    staleTime: 5 * 60 * 1000,
+    enabled: aiOpen,
+  });
+  const availableProviders = Object.keys(aiModels).filter(p => aiModels[p]?.length > 0);
+  const modelsForProvider = aiModels[aiProvider] || [];
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -131,6 +143,8 @@ export default function Calendar() {
           topics: aiForm.topics,
           instructions: aiForm.instructions,
           agentProfile: selectedAgent || null,
+          provider: aiProvider,
+          model: aiModel,
         }),
       });
       const data = await res.json();
@@ -328,6 +342,52 @@ export default function Calendar() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* AI Model Selector */}
+            <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-1.5">
+              <Label className="text-xs flex items-center gap-1 text-muted-foreground">
+                <Cpu className="w-3 h-3" /> Modelo de IA
+              </Label>
+              <div className="flex gap-2">
+                <Select
+                  value={aiProvider}
+                  onValueChange={(v) => {
+                    setAiProvider(v);
+                    const firstModel = aiModels[v]?.[0]?.id;
+                    if (firstModel) setAiModel(firstModel);
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-xs w-28 shrink-0" data-testid="select-calendar-ai-provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableProviders.length > 0 ? (
+                      availableProviders.map(p => (
+                        <SelectItem key={p} value={p}>
+                          {p === "openai" ? "OpenAI" : p === "anthropic" ? "Anthropic" : "Gemini"}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Select value={aiModel} onValueChange={setAiModel}>
+                  <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-calendar-ai-model">
+                    <SelectValue placeholder="Selecionar modelo..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelsForProvider.length > 0 ? (
+                      modelsForProvider.map(m => (
+                        <SelectItem key={m.id} value={m.id}>{m.id}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value={aiModel}>{aiModel}</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label>Agente de Social Media</Label>
               <Select value={aiForm.agentProfileId} onValueChange={(v) => setAiForm(prev => ({ ...prev, agentProfileId: v }))}>

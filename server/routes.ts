@@ -3,16 +3,13 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertContentPieceSchema, insertTemplateSchema, insertKnowledgeBaseSchema, insertPromptSchema, insertAgentProfileSchema } from "@shared/schema";
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import multer from "multer";
 import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import express from "express";
-
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -41,6 +38,75 @@ const fontUpload = multer({
     else cb(new Error("Formato inválido. Use TTF, OTF, WOFF ou WOFF2."));
   },
 });
+
+// ── Helper: get OpenAI client (custom key > Replit integration) ──
+async function getOpenAIClient() {
+  const customKey = await storage.getSetting("ai_openai_key");
+  if (customKey) return new OpenAI({ apiKey: customKey });
+  return new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  });
+}
+
+// ── Helper: generate text with any provider ──
+async function generateTextContent({
+  provider,
+  model,
+  systemPrompt,
+  userPrompt,
+  jsonMode = true,
+  maxTokens = 2000,
+}: {
+  provider: string;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  jsonMode?: boolean;
+  maxTokens?: number;
+}): Promise<string> {
+  if (provider === "anthropic") {
+    const key = await storage.getSetting("ai_anthropic_key");
+    if (!key) throw new Error("Chave da API Anthropic não configurada em Configurações → IA.");
+    const client = new Anthropic({ apiKey: key });
+    const finalPrompt = jsonMode
+      ? `${userPrompt}\n\nIMPORTANTE: Retorne SOMENTE JSON válido, sem markdown, sem explicações, apenas o objeto JSON.`
+      : userPrompt;
+    const res = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: "user", content: finalPrompt }],
+    });
+    return (res.content[0] as any)?.text || "{}";
+  }
+
+  if (provider === "gemini") {
+    const key = await storage.getSetting("ai_gemini_key");
+    if (!key) throw new Error("Chave da API Gemini não configurada em Configurações → IA.");
+    const genAI = new GoogleGenerativeAI(key);
+    const geminiModel = genAI.getGenerativeModel({
+      model,
+      generationConfig: jsonMode ? { responseMimeType: "application/json" } : {},
+    });
+    const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
+    const result = await geminiModel.generateContent(combinedPrompt);
+    return result.response.text();
+  }
+
+  // Default: OpenAI (custom key or Replit integration)
+  const client = await getOpenAIClient();
+  const res = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    response_format: jsonMode ? { type: "json_object" } : undefined,
+    max_completion_tokens: maxTokens,
+  });
+  return res.choices[0]?.message?.content || "{}";
+}
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
 
@@ -330,52 +396,124 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { res.status(500).json({ error: "Failed to delete agent profile" }); }
   });
 
+  // --- AI PROVIDERS: List available models per configured provider ---
+  app.get("/api/ai/models", async (_req, res) => {
+    const result: Record<string, { id: string; name: string }[]> = {};
+
+    // OpenAI (custom key takes priority, fallback to Replit integration)
+    try {
+      const client = await getOpenAIClient();
+      const models = await client.models.list();
+      const textModels = models.data
+        .filter(m =>
+          (m.id.startsWith("gpt-") || m.id.startsWith("o1") || m.id.startsWith("o3") || m.id.startsWith("o4")) &&
+          !m.id.includes("realtime") && !m.id.includes("audio") &&
+          !m.id.includes("tts") && !m.id.includes("whisper") &&
+          !m.id.includes("instruct") && !m.id.includes("embedding")
+        )
+        .map(m => ({ id: m.id, name: m.id }))
+        .sort((a, b) => b.id.localeCompare(a.id));
+      if (textModels.length > 0) result.openai = textModels;
+    } catch (e) {
+      console.error("OpenAI models fetch error:", e);
+    }
+
+    // Anthropic
+    const anthropicKey = await storage.getSetting("ai_anthropic_key");
+    if (anthropicKey) {
+      try {
+        const response = await fetch("https://api.anthropic.com/v1/models?limit=50", {
+          headers: {
+            "x-api-key": anthropicKey,
+            "anthropic-version": "2023-06-01",
+          },
+        });
+        if (response.ok) {
+          const data = await response.json() as any;
+          result.anthropic = (data.data || []).map((m: any) => ({
+            id: m.id,
+            name: m.display_name || m.id,
+          }));
+        }
+      } catch (e) {
+        console.error("Anthropic models fetch error:", e);
+      }
+    }
+
+    // Gemini
+    const geminiKey = await storage.getSetting("ai_gemini_key");
+    if (geminiKey) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`
+        );
+        if (response.ok) {
+          const data = await response.json() as any;
+          const textModels = (data.models || [])
+            .filter((m: any) =>
+              m.supportedGenerationMethods?.includes("generateContent") &&
+              m.name.includes("gemini") &&
+              !m.name.includes("embedding") &&
+              !m.name.includes("vision")
+            )
+            .map((m: any) => ({
+              id: m.name.replace("models/", ""),
+              name: m.displayName || m.name.replace("models/", ""),
+            }));
+          if (textModels.length > 0) result.gemini = textModels;
+        }
+      } catch (e) {
+        console.error("Gemini models fetch error:", e);
+      }
+    }
+
+    res.json(result);
+  });
+
   // --- AI: GENERATE CAPTION ---
   app.post("/api/ai/caption", async (req, res) => {
     try {
-      const { projectContext, platform, format, template, topic, tone, knowledgeContext, carouselSlides } = req.body;
+      const {
+        projectContext, platform, format, template, topic, tone,
+        knowledgeContext, carouselSlides,
+        provider = "openai", model = "gpt-4.1",
+      } = req.body;
 
       const isCarousel = format === "carrossel" || (carouselSlides && carouselSlides > 1);
 
-      const systemPrompt = `Você é um especialista em marketing digital e criação de conteúdo para redes sociais. 
-      Crie conteúdo em português brasileiro, direto, autêntico e envolvente.
-      ${projectContext ? `Contexto do projeto: ${projectContext}` : ""}
-      ${knowledgeContext ? `Base de conhecimento: ${knowledgeContext}` : ""}`;
+      const systemPrompt = `Você é um especialista em marketing digital e criação de conteúdo para redes sociais.
+Crie conteúdo em português brasileiro, direto, autêntico e envolvente.
+${projectContext ? `Contexto do projeto: ${projectContext}` : ""}
+${knowledgeContext ? `Base de conhecimento: ${knowledgeContext}` : ""}`;
 
       const carouselInstructions = isCarousel && carouselSlides
         ? `\nEste é um CARROSSEL com ${carouselSlides} slides. A legenda deve:
-        1. Ter um HOOK forte na primeira linha (para parar o scroll)
-        2. Convidar a deslizar ("Deslize para ver →" ou variação)
-        3. Resumir brevemente o que o usuário vai aprender/ver em cada slide
-        4. Terminar com CTA claro (comentário, salvar, seguir, etc.)
-        Se um template foi fornecido, siga a estrutura de slides indicada nele.`
+1. Ter um HOOK forte na primeira linha (para parar o scroll)
+2. Convidar a deslizar ("Deslize para ver →" ou variação)
+3. Resumir brevemente o que o usuário vai aprender/ver em cada slide
+4. Terminar com CTA claro (comentário, salvar, seguir, etc.)
+Se um template foi fornecido, siga a estrutura de slides indicada nele.`
         : "";
 
-      const userPrompt = `Crie uma legenda para ${platform === "instagram" ? "Instagram" : "LinkedIn"} 
-      Formato: ${isCarousel ? `Carrossel (${carouselSlides || "múltiplos"} slides)` : format}
-      Tópico: ${topic}
-      Tom: ${tone || "profissional e engajante"}
-      ${template ? `Use este template como base: ${template}` : ""}
-      ${carouselInstructions}
-      
-      Retorne um JSON com:
-      - caption: a legenda completa (com estrutura de carrossel se aplicável)
-      - hashtags: string com hashtags relevantes
-      - imagePrompt: descrição em inglês para gerar o slide 1 do carrossel${isCarousel ? " (slide de capa, deve ser o mais atrativo visualmente)" : " ou imagem complementar"}`;
+      const userPrompt = `Crie uma legenda para ${platform === "instagram" ? "Instagram" : "LinkedIn"}
+Formato: ${isCarousel ? `Carrossel (${carouselSlides || "múltiplos"} slides)` : format}
+Tópico: ${topic}
+Tom: ${tone || "profissional e engajante"}
+${template ? `Use este template como base: ${template}` : ""}
+${carouselInstructions}
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 2000,
-      });
+Retorne um JSON com:
+- caption: a legenda completa (com estrutura de carrossel se aplicável)
+- hashtags: string com hashtags relevantes
+- imagePrompt: descrição em inglês para gerar o slide 1 do carrossel${isCarousel ? " (slide de capa, deve ser o mais atrativo visualmente)" : " ou imagem complementar"}`;
 
-      const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+      const text = await generateTextContent({ provider, model, systemPrompt, userPrompt, jsonMode: true, maxTokens: 2000 });
+      const result = JSON.parse(text);
       res.json(result);
-    } catch (e) { res.status(500).json({ error: "Failed to generate caption" }); }
+    } catch (e: any) {
+      console.error("Caption generation error:", e);
+      res.status(500).json({ error: e.message || "Failed to generate caption" });
+    }
   });
 
   // --- AI: GENERATE IMAGE ---
@@ -397,7 +535,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (b.visualRestrictions?.length) briefLines.push(`Avoid: ${b.visualRestrictions.join(", ")}`);
         if (b.styleReference) briefLines.push(`Style reference: ${b.styleReference}`);
       }
-
       const briefContext = briefLines.length > 0 ? briefLines.join(". ") + "." : "";
 
       const agentLines: string[] = [];
@@ -428,20 +565,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "High quality, professional marketing image for social media.",
       ].filter(Boolean).join("\n");
 
-      const size = platform === "instagram" && format === "story" ? "1024x1024" : "1024x1024";
-
-      const response = await openai.images.generate({
+      const openaiClient = await getOpenAIClient();
+      const response = await openaiClient.images.generate({
         model: "gpt-image-1",
         prompt: enhancedPrompt,
         n: 1,
-        size,
+        size: "1024x1024",
       });
 
       const imageData = response.data[0];
       res.json({ b64_json: imageData.b64_json, url: imageData.url });
-    } catch (e) {
+    } catch (e: any) {
       console.error("Image generation error:", e);
-      res.status(500).json({ error: "Failed to generate image" });
+      res.status(500).json({ error: e.message || "Failed to generate image" });
     }
   });
 
@@ -463,8 +599,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "Image required" });
       }
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
+      const openaiClient = await getOpenAIClient();
+      const response = await openaiClient.chat.completions.create({
+        model: "gpt-4.1",
         messages: [{
           role: "user",
           content: [
@@ -491,9 +628,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const result = JSON.parse(response.choices[0]?.message?.content || "{}");
       res.json(result);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Image analysis error:", e);
-      res.status(500).json({ error: "Failed to analyze image" });
+      res.status(500).json({ error: e.message || "Failed to analyze image" });
     }
   });
 
@@ -502,10 +639,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const {
         projectId, projectContext, period, platforms, topics, instructions,
-        objective, contentMix, postsPerWeek, knowledgeContext, brandRules, agentProfile
+        objective, contentMix, postsPerWeek, knowledgeContext, brandRules, agentProfile,
+        provider = "openai", model = "gpt-4.1",
       } = req.body;
 
-      // Fetch knowledge base if projectId provided and no knowledgeContext
       let knowledgeText = knowledgeContext || "";
       if (projectId && !knowledgeContext) {
         try {
@@ -518,11 +655,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const contentMixInstructions: Record<string, string> = {
         equilibrado: "Distribua igualmente entre conteúdo educativo (40%), relacional/humanizado (30%) e promocional/conversão (30%).",
-        educativo: "Priorize conteúdo educativo e de autoridade (60%), complementado por relacional (25%) e promocional (15%). Foco em ensinar, desmistificar e agregar valor.",
-        promocional: "Distribua com foco em conversão e vendas (50%), educativo para preparar a audiência (30%) e relacional (20%). Use gatilhos como escassez, prova social e benefícios.",
-        relacional: "Priorize conteúdo humanizado e de conexão (55%), educativo leve (30%) e promocional sutil (15%). Foco em bastidores, histórias, valores e comunidade.",
+        educativo: "Priorize conteúdo educativo e de autoridade (60%), complementado por relacional (25%) e promocional (15%).",
+        promocional: "Distribua com foco em conversão e vendas (50%), educativo para preparar a audiência (30%) e relacional (20%).",
+        relacional: "Priorize conteúdo humanizado e de conexão (55%), educativo leve (30%) e promocional sutil (15%).",
       };
-
       const mixGuide = contentMixInstructions[contentMix] || contentMixInstructions.equilibrado;
 
       const agentProfileContext = agentProfile ? `
@@ -600,21 +736,16 @@ Retorne um JSON com array "posts" onde cada post tem:
 - hook: o primeiro elemento que chamará atenção (primeira linha do texto ou descrição do visual)
 - contentPillar: pilar de conteúdo (ex: "autoridade", "humanização", "produto/serviço", "educação", "prova social")`;
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-4.1",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 4000,
-      });
-
-      const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+      const text = await generateTextContent({ provider, model, systemPrompt, userPrompt, jsonMode: true, maxTokens: 4000 });
+      const result = JSON.parse(text);
       res.json(result);
-    } catch (e) { res.status(500).json({ error: "Failed to generate calendar" }); }
+    } catch (e: any) {
+      console.error("Calendar generation error:", e);
+      res.status(500).json({ error: e.message || "Failed to generate calendar" });
+    }
   });
 
+  // --- ACCOUNT & SETTINGS ---
   app.get("/api/account", async (_req, res) => {
     try {
       const name = await storage.getSetting("account_name");
@@ -658,7 +789,7 @@ Retorne um JSON com array "posts" onde cada post tem:
       const all = await storage.getSettings();
       const masked: Record<string, string> = {};
       for (const [k, v] of Object.entries(all)) {
-        if (v && (k.includes("token") || k.includes("secret"))) {
+        if (v && (k.includes("token") || k.includes("secret") || k.includes("key"))) {
           masked[k] = v.length > 8 ? `${"*".repeat(v.length - 4)}${v.slice(-4)}` : "****";
         } else {
           masked[k] = v;
