@@ -529,6 +529,44 @@ Retorne um JSON com array "posts" onde cada post tem:
     } catch (e) { res.status(500).json({ error: "Failed to generate calendar" }); }
   });
 
+  app.get("/api/account", async (_req, res) => {
+    try {
+      const name = await storage.getSetting("account_name");
+      const email = await storage.getSetting("account_email");
+      const hash = await storage.getSetting("account_password_hash");
+      res.json({ name: name || "", email: email || "", hasPassword: !!hash });
+    } catch (e) { res.status(500).json({ error: "Failed to get account" }); }
+  });
+
+  app.patch("/api/account", async (req, res) => {
+    try {
+      const { name, email } = req.body;
+      if (name !== undefined) await storage.setSetting("account_name", name || null);
+      if (email !== undefined) await storage.setSetting("account_email", email || null);
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: "Failed to update account" }); }
+  });
+
+  app.post("/api/account/change-password", async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: "A nova senha deve ter pelo menos 6 caracteres" });
+      }
+      const crypto = await import("crypto");
+      const stored = await storage.getSetting("account_password_hash");
+      if (stored) {
+        const currentHash = crypto.createHash("sha256").update(currentPassword || "").digest("hex");
+        if (currentHash !== stored) {
+          return res.status(401).json({ error: "Senha atual incorreta" });
+        }
+      }
+      const newHash = crypto.createHash("sha256").update(newPassword).digest("hex");
+      await storage.setSetting("account_password_hash", newHash);
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: "Failed to change password" }); }
+  });
+
   app.get("/api/settings", async (_req, res) => {
     try {
       const all = await storage.getSettings();
