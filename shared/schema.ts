@@ -99,6 +99,7 @@ export const templates = pgTable("templates", {
   format: text("format"),
   captionTemplate: text("caption_template"),
   promptTemplate: text("prompt_template"),
+  referenceImageUrl: text("reference_image_url"),
   category: text("category"),
   isGlobal: boolean("is_global").default(false),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),

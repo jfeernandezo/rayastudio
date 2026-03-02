@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Sparkles, Image, Upload, Loader2, Save, CheckCircle, Copy, Wand2, RefreshCw, BookOpen, Zap, Share2 } from "lucide-react";
+import { ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw, BookOpen, Zap, Share2, ImageIcon } from "lucide-react";
 import type { Project, ContentPiece, Template, KnowledgeBase, Prompt } from "@shared/schema";
 
 const statusOptions = [
@@ -25,15 +25,12 @@ const statusOptions = [
 export default function ContentCreator() {
   const { id, contentId } = useParams<{ id: string; contentId: string }>();
   const { toast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState("profissional e engajante");
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
   const [generatingCaption, setGeneratingCaption] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
-  const [analyzingImage, setAnalyzingImage] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
 
   const [form, setForm] = useState<Partial<ContentPiece>>({});
   const [saved, setSaved] = useState(false);
@@ -47,6 +44,7 @@ export default function ContentCreator() {
   useEffect(() => {
     if (content) setForm(content);
   }, [content?.id]);
+
   const { data: templates = [] } = useQuery<Template[]>({ queryKey: ["/api/templates"] });
   const { data: knowledge = [] } = useQuery<KnowledgeBase[]>({
     queryKey: ["/api/knowledge", "project", id],
@@ -56,6 +54,8 @@ export default function ContentCreator() {
     },
   });
   const { data: prompts = [] } = useQuery<Prompt[]>({ queryKey: ["/api/prompts"] });
+
+  const selectedTemplateObj = templates.find(t => t.id === Number(selectedTemplate));
 
   const saveMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/content/${contentId}`, form),
@@ -85,10 +85,18 @@ export default function ContentCreator() {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleTemplateChange = (value: string) => {
+    setSelectedTemplate(value);
+    const tmpl = templates.find(t => t.id === Number(value));
+    if (tmpl?.promptTemplate) {
+      updateField("imagePrompt", tmpl.promptTemplate);
+    }
+  };
+
   const handleGenerateCaption = async () => {
     setGeneratingCaption(true);
     try {
-      const template = templates.find(t => t.id === Number(selectedTemplate));
+      const template = selectedTemplateObj;
       const knowledgeContext = knowledge.map(k => `${k.title}: ${k.content}`).join("\n");
       const res = await fetch("/api/ai/caption", {
         method: "POST",
@@ -106,7 +114,7 @@ export default function ContentCreator() {
       const data = await res.json();
       if (data.caption) updateField("caption", data.caption);
       if (data.hashtags) updateField("hashtags", data.hashtags);
-      if (data.imagePrompt) updateField("imagePrompt", data.imagePrompt);
+      if (data.imagePrompt && !form.imagePrompt) updateField("imagePrompt", data.imagePrompt);
       toast({ title: "Legenda gerada!" });
     } catch (e) {
       toast({ title: "Erro ao gerar legenda", variant: "destructive" });
@@ -143,24 +151,6 @@ export default function ContentCreator() {
       toast({ title: "Erro ao gerar imagem", variant: "destructive" });
     } finally {
       setGeneratingImage(false);
-    }
-  };
-
-  const handleAnalyzeImage = async (file: File) => {
-    setAnalyzingImage(true);
-    try {
-      const formData = new FormData();
-      formData.append("image", file);
-      const res = await fetch("/api/ai/analyze-image", { method: "POST", body: formData });
-      const data = await res.json();
-      setAnalysisResult(data);
-      if (data.imagePromptToReplicate) updateField("imagePrompt", data.imagePromptToReplicate);
-      if (data.suggestedCaption) updateField("caption", data.suggestedCaption);
-      toast({ title: "Imagem analisada!" });
-    } catch (e) {
-      toast({ title: "Erro ao analisar imagem", variant: "destructive" });
-    } finally {
-      setAnalyzingImage(false);
     }
   };
 
@@ -252,7 +242,6 @@ export default function ContentCreator() {
             <TabsList className="w-full">
               <TabsTrigger value="caption" className="flex-1">Legenda</TabsTrigger>
               <TabsTrigger value="ai" className="flex-1">Gerador IA</TabsTrigger>
-              <TabsTrigger value="analyze" className="flex-1">Analisar</TabsTrigger>
             </TabsList>
 
             <TabsContent value="caption" className="space-y-3 mt-3">
@@ -288,6 +277,40 @@ export default function ContentCreator() {
 
             <TabsContent value="ai" className="space-y-3 mt-3">
               <div className="space-y-1">
+                <Label className="text-xs">Template</Label>
+                <Select value={selectedTemplate} onValueChange={handleTemplateChange}>
+                  <SelectTrigger className="h-8" data-testid="select-template"><SelectValue placeholder="Selecionar template..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {templates.map(t => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.name}{t.referenceImageUrl || t.promptTemplate ? " 🖼" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedTemplateObj && (selectedTemplateObj.referenceImageUrl || selectedTemplateObj.promptTemplate) && (
+                  <div className="flex items-start gap-2 p-2 rounded-md border border-primary/20 bg-primary/5 mt-1">
+                    {selectedTemplateObj.referenceImageUrl && (
+                      <img
+                        src={selectedTemplateObj.referenceImageUrl}
+                        alt="Referência visual"
+                        className="w-12 h-12 object-cover rounded-sm shrink-0"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-primary flex items-center gap-1">
+                        <ImageIcon className="w-3 h-3" /> Referência visual carregada
+                      </p>
+                      {selectedTemplateObj.promptTemplate && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{selectedTemplateObj.promptTemplate.slice(0, 100)}...</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
                 <Label className="text-xs">Tópico / Contexto</Label>
                 <Textarea
                   value={aiTopic}
@@ -302,16 +325,7 @@ export default function ContentCreator() {
                 <Label className="text-xs">Tom</Label>
                 <Input value={aiTone} onChange={(e) => setAiTone(e.target.value)} placeholder="Ex: informal, inspirador, educativo..." data-testid="input-ai-tone" />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Template</Label>
-                <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                  <SelectTrigger className="h-8" data-testid="select-template"><SelectValue placeholder="Selecionar template..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {templates.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+
               {prompts.length > 0 && (
                 <div className="space-y-1">
                   <Label className="text-xs">Prompts Rápidos</Label>
@@ -329,49 +343,39 @@ export default function ContentCreator() {
                   </div>
                 </div>
               )}
-              <Button onClick={handleGenerateCaption} disabled={generatingCaption} size="sm" className="w-full" data-testid="button-generate-caption">
-                {generatingCaption ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Legenda</>}
-              </Button>
-            </TabsContent>
 
-            <TabsContent value="analyze" className="space-y-3 mt-3">
-              <div
-                className="border-2 border-dashed border-border rounded-md p-6 text-center cursor-pointer hover-elevate"
-                onClick={() => fileRef.current?.click()}
-                data-testid="upload-zone"
-              >
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { if (e.target.files?.[0]) handleAnalyzeImage(e.target.files[0]); }}
-                />
-                {analyzingImage ? (
-                  <><Loader2 className="w-6 h-6 text-muted-foreground animate-spin mx-auto mb-2" /><p className="text-xs text-muted-foreground">Analisando imagem...</p></>
-                ) : (
-                  <><Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" /><p className="text-sm font-medium text-foreground">Enviar imagem de referência</p><p className="text-xs text-muted-foreground mt-1">Extraia o estilo, texto e prompt para replicar</p></>
-                )}
+              <Button onClick={handleGenerateCaption} disabled={generatingCaption} size="sm" className="w-full" data-testid="button-generate-caption">
+                {generatingCaption ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando legenda...</> : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Legenda</>}
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center"><span className="bg-background px-2 text-xs text-muted-foreground">imagem</span></div>
               </div>
-              {analysisResult && (
-                <Card>
-                  <CardContent className="p-3 space-y-2">
-                    <p className="text-xs font-medium text-foreground">Análise da Imagem</p>
-                    {analysisResult.description && <p className="text-xs text-muted-foreground"><span className="font-medium">Descrição:</span> {analysisResult.description}</p>}
-                    {analysisResult.style?.mood && <p className="text-xs text-muted-foreground"><span className="font-medium">Tom:</span> {analysisResult.style.mood}</p>}
-                    {analysisResult.style?.composition && <p className="text-xs text-muted-foreground"><span className="font-medium">Composição:</span> {analysisResult.style.composition}</p>}
-                    {analysisResult.targetAudience && <p className="text-xs text-muted-foreground"><span className="font-medium">Público:</span> {analysisResult.targetAudience}</p>}
-                    {analysisResult.contentType && <Badge variant="outline" className="text-xs">{analysisResult.contentType}</Badge>}
-                  </CardContent>
-                </Card>
-              )}
+
+              <div className="space-y-1">
+                <Label className="text-xs">Prompt de Imagem</Label>
+                <Textarea
+                  value={form.imagePrompt || ""}
+                  onChange={(e) => updateField("imagePrompt", e.target.value)}
+                  placeholder={selectedTemplateObj?.promptTemplate ? "Prompt carregado do template — edite se necessário..." : "Descreva a imagem que quer gerar ou selecione um template com referência visual..."}
+                  rows={3}
+                  className="resize-none"
+                  data-testid="input-image-prompt"
+                />
+              </div>
+
+              <Button onClick={handleGenerateImage} disabled={generatingImage || !form.imagePrompt} size="sm" className="w-full" variant="outline" data-testid="button-generate-image-ai">
+                {generatingImage ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando imagem...</> : <><Wand2 className="w-4 h-4 mr-1" /> Gerar Imagem com IA</>}
+              </Button>
+
               {knowledge.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs flex items-center gap-1"><BookOpen className="w-3 h-3" /> Base de Conhecimento</Label>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {knowledge.slice(0, 5).map(k => (
+                <div className="space-y-1 pt-1">
+                  <Label className="text-xs flex items-center gap-1 text-muted-foreground"><BookOpen className="w-3 h-3" /> Base de Conhecimento ativa</Label>
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {knowledge.slice(0, 3).map(k => (
                       <div key={k.id} className="text-xs p-2 rounded-sm bg-muted">
-                        <span className="font-medium">{k.title}:</span> <span className="text-muted-foreground">{k.content.slice(0, 100)}...</span>
+                        <span className="font-medium">{k.title}:</span> <span className="text-muted-foreground">{k.content.slice(0, 80)}...</span>
                       </div>
                     ))}
                   </div>
@@ -394,27 +398,27 @@ export default function ContentCreator() {
                 </div>
               </div>
             ) : (
-              <div className="border-2 border-dashed border-border rounded-md p-8 flex flex-col items-center gap-2">
-                <Image className="w-8 h-8 text-muted-foreground" />
-                <p className="text-xs text-muted-foreground text-center">Gere uma imagem com IA ou faça upload</p>
+              <div
+                className="border-2 border-dashed border-border rounded-md p-8 flex flex-col items-center gap-2 cursor-pointer hover-elevate"
+                onClick={handleGenerateImage}
+                data-testid="image-generate-zone"
+              >
+                {generatingImage ? (
+                  <>
+                    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                    <p className="text-xs text-muted-foreground">Gerando imagem...</p>
+                  </>
+                ) : (
+                  <>
+                    <Image className="w-8 h-8 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground text-center">
+                      {form.imagePrompt ? "Clique para gerar a imagem" : "Preencha o prompt de imagem na aba Gerador IA"}
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">Prompt de Imagem</Label>
-            <Textarea
-              value={form.imagePrompt || ""}
-              onChange={(e) => updateField("imagePrompt", e.target.value)}
-              placeholder="Descreva a imagem que quer gerar (em inglês para melhores resultados)..."
-              rows={4}
-              className="resize-none"
-              data-testid="input-image-prompt"
-            />
-          </div>
-          <Button onClick={handleGenerateImage} disabled={generatingImage || !form.imagePrompt} size="sm" className="w-full" data-testid="button-generate-image">
-            {generatingImage ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando Imagem...</> : <><Wand2 className="w-4 h-4 mr-1" /> Gerar Imagem com IA</>}
-          </Button>
 
           {form.caption && (
             <Card>

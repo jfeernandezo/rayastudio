@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, Trash2, Edit, Globe, Upload, Loader2, Image, Sparkles } from "lucide-react";
+import { Plus, FileText, Trash2, Edit, Globe, Upload, Loader2, Image, Sparkles, ImageIcon } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import type { Template, Project } from "@shared/schema";
 
@@ -29,27 +29,47 @@ export default function Templates() {
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
 
   const form = useForm({
-    defaultValues: { name: "", description: "", platform: "any", format: "any", captionTemplate: "", promptTemplate: "", category: "", isGlobal: true, projectId: null as number | null },
+    defaultValues: { name: "", description: "", platform: "any", format: "any", captionTemplate: "", promptTemplate: "", referenceImageUrl: "" as string, category: "", isGlobal: true, projectId: null as number | null },
   });
 
   const openCreate = () => {
     setEditItem(null);
-    form.reset({ name: "", description: "", platform: "any", format: "any", captionTemplate: "", promptTemplate: "", category: "", isGlobal: true, projectId: null });
+    form.reset({ name: "", description: "", platform: "any", format: "any", captionTemplate: "", promptTemplate: "", referenceImageUrl: "", category: "", isGlobal: true, projectId: null });
     setOpen(true);
   };
 
   const openEdit = (t: Template) => {
     setEditItem(t);
-    form.reset({ name: t.name, description: t.description || "", platform: t.platform || "any", format: t.format || "any", captionTemplate: t.captionTemplate || "", promptTemplate: t.promptTemplate || "", category: t.category || "", isGlobal: t.isGlobal ?? true, projectId: t.projectId || null });
+    form.reset({
+      name: t.name,
+      description: t.description || "",
+      platform: t.platform || "any",
+      format: t.format || "any",
+      captionTemplate: t.captionTemplate || "",
+      promptTemplate: t.promptTemplate || "",
+      referenceImageUrl: t.referenceImageUrl || "",
+      category: t.category || "",
+      isGlobal: t.isGlobal ?? true,
+      projectId: t.projectId || null,
+    });
     setOpen(true);
   };
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => {
-      const cleaned = { ...data, platform: data.platform === "any" ? null : data.platform, format: data.format === "any" ? null : data.format };
+      const cleaned = {
+        ...data,
+        platform: data.platform === "any" ? null : data.platform,
+        format: data.format === "any" ? null : data.format,
+        referenceImageUrl: data.referenceImageUrl || null,
+      };
       return editItem ? apiRequest("PATCH", `/api/templates/${editItem.id}`, cleaned) : apiRequest("POST", "/api/templates", cleaned);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/templates"] }); setOpen(false); toast({ title: editItem ? "Template atualizado!" : "Template criado!" }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
+      setOpen(false);
+      toast({ title: editItem ? "Template atualizado!" : "Template criado!" });
+    },
     onError: () => toast({ title: "Erro ao salvar template", variant: "destructive" }),
   });
 
@@ -85,11 +105,14 @@ export default function Templates() {
       : "[HOOK/TÍTULO]\n\n[CORPO DO CONTEÚDO]\n\n[CHAMADA PARA AÇÃO]\n\n[HASHTAGS]";
     form.reset({
       name: extractResult.contentType ? `Template: ${extractResult.contentType}` : "Template Extraído",
-      description: extractResult.description || "Template extraído a partir de imagem de referência.",
+      description: extractResult.description
+        ? extractResult.description.slice(0, 120) + (extractResult.description.length > 120 ? "..." : "")
+        : "Template extraído a partir de imagem de referência.",
       platform: "any",
       format: "any",
       captionTemplate: captionStructure,
       promptTemplate: extractResult.imagePromptToReplicate || "",
+      referenceImageUrl: extractPreview || "",
       category: extractResult.contentType || "Referência Visual",
       isGlobal: true,
       projectId: null,
@@ -99,15 +122,17 @@ export default function Templates() {
     setOpen(true);
   };
 
-  const platformLabels: Record<string, string> = { instagram: "Instagram", linkedin: "LinkedIn" };
+  const platformLabels: Record<string, string> = { instagram: "Instagram", linkedin: "LinkedIn", tiktok: "TikTok" };
   const formatLabels: Record<string, string> = { post: "Post", story: "Story", carrossel: "Carrossel", reels: "Reels" };
+
+  const hasVisualRef = (t: Template) => !!(t.referenceImageUrl || t.promptTemplate);
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Templates</h1>
-          <p className="text-sm text-muted-foreground">Modelos de conteúdo reutilizáveis</p>
+          <p className="text-sm text-muted-foreground">Modelos de conteúdo com referências visuais para a IA</p>
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => { setExtractResult(null); setExtractPreview(null); setExtractOpen(true); }} data-testid="button-extract-from-image">
@@ -133,32 +158,44 @@ export default function Templates() {
       ) : (
         <div className="grid md:grid-cols-2 gap-3">
           {templates.map((t) => (
-            <Card key={t.id} className="group" data-testid={`template-${t.id}`}>
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-foreground">{t.name}</p>
-                    {t.isGlobal && <Badge variant="secondary" className="text-xs"><Globe className="w-3 h-3 mr-1" />Global</Badge>}
+            <Card key={t.id} className="group overflow-hidden" data-testid={`template-${t.id}`}>
+              <div className="flex">
+                {t.referenceImageUrl && (
+                  <div className="w-24 shrink-0 bg-muted overflow-hidden">
+                    <img src={t.referenceImageUrl} alt="Referência visual" className="w-full h-full object-cover" style={{ minHeight: "90px" }} />
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => openEdit(t)}>
-                      <Edit className="w-3.5 h-3.5 text-muted-foreground" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => deleteMutation.mutate(t.id)}>
-                      <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
-                    </Button>
-                  </div>
-                </div>
-                {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
-                <div className="flex flex-wrap gap-1">
-                  {t.platform && <Badge variant="outline" className="text-xs">{platformLabels[t.platform] || t.platform}</Badge>}
-                  {t.format && <Badge variant="outline" className="text-xs">{formatLabels[t.format] || t.format}</Badge>}
-                  {t.category && <Badge variant="outline" className="text-xs">{t.category}</Badge>}
-                </div>
-                {t.captionTemplate && (
-                  <p className="text-xs text-muted-foreground bg-muted rounded-sm p-2 line-clamp-2">{t.captionTemplate}</p>
                 )}
-              </CardContent>
+                <CardContent className="p-4 space-y-2 flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{t.name}</p>
+                      {t.isGlobal && <Badge variant="secondary" className="text-xs shrink-0"><Globe className="w-3 h-3 mr-1" />Global</Badge>}
+                    </div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => openEdit(t)}>
+                        <Edit className="w-3.5 h-3.5 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => deleteMutation.mutate(t.id)}>
+                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+                  {t.description && <p className="text-xs text-muted-foreground line-clamp-2">{t.description}</p>}
+                  <div className="flex flex-wrap gap-1">
+                    {t.platform && <Badge variant="outline" className="text-xs">{platformLabels[t.platform] || t.platform}</Badge>}
+                    {t.format && <Badge variant="outline" className="text-xs">{formatLabels[t.format] || t.format}</Badge>}
+                    {t.category && <Badge variant="outline" className="text-xs">{t.category}</Badge>}
+                    {hasVisualRef(t) && (
+                      <Badge variant="outline" className="text-xs text-primary border-primary/30 bg-primary/5">
+                        <ImageIcon className="w-3 h-3 mr-1" />Ref. visual
+                      </Badge>
+                    )}
+                  </div>
+                  {t.captionTemplate && (
+                    <p className="text-xs text-muted-foreground bg-muted rounded-sm p-2 line-clamp-2">{t.captionTemplate}</p>
+                  )}
+                </CardContent>
+              </div>
             </Card>
           ))}
         </div>
@@ -184,6 +221,7 @@ export default function Templates() {
                       <SelectItem value="any">Qualquer</SelectItem>
                       <SelectItem value="instagram">Instagram</SelectItem>
                       <SelectItem value="linkedin">LinkedIn</SelectItem>
+                      <SelectItem value="tiktok">TikTok</SelectItem>
                     </SelectContent>
                   </Select>
                 )} />
@@ -209,17 +247,34 @@ export default function Templates() {
               <Input placeholder="Ex: Lançamento, Engajamento, Educativo..." {...form.register("category")} />
             </div>
             <div className="space-y-1">
+              <Label>Descrição</Label>
+              <Input placeholder="Para que serve este template?" {...form.register("description")} />
+            </div>
+            <div className="space-y-1">
               <Label>Template de Legenda</Label>
               <Textarea placeholder="Ex: [HEADLINE]\n\n[CORPO DO POST]\n\nO que você achou? Conta nos comentários!" rows={5} className="resize-none" {...form.register("captionTemplate")} />
             </div>
             <div className="space-y-1">
-              <Label>Prompt Visual (para replicar o estilo da imagem)</Label>
-              <Textarea placeholder="Ex: Describe the image style, colors, and visual elements to replicate..." rows={3} className="resize-none" {...form.register("promptTemplate")} />
+              <Label>Prompt Visual <span className="text-muted-foreground text-xs font-normal">(descreve o estilo visual para gerar imagens)</span></Label>
+              <Textarea placeholder="Ex: Dark background with orange accents, 3D rocket graphic, bold white sans-serif typography..." rows={4} className="resize-none" {...form.register("promptTemplate")} />
             </div>
-            <div className="space-y-1">
-              <Label>Descrição</Label>
-              <Input placeholder="Para que serve este template?" {...form.register("description")} />
-            </div>
+            {form.watch("referenceImageUrl") && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Imagem de referência salva</Label>
+                <div className="relative w-full rounded-md overflow-hidden border border-border">
+                  <img src={form.watch("referenceImageUrl")} alt="Referência" className="w-full object-contain max-h-32" />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="absolute top-2 right-2 h-6 text-xs bg-background/80"
+                    onClick={() => form.setValue("referenceImageUrl", "")}
+                  >
+                    Remover
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="flex gap-2 justify-end">
               <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancelar</Button>
               <Button type="submit" size="sm" disabled={saveMutation.isPending} data-testid="button-submit-template">
@@ -240,7 +295,7 @@ export default function Templates() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Envie uma imagem de referência e a IA vai analisar a estrutura, estilo visual e texto para criar um template reutilizável.
+              Envie um post, carrossel ou estático de referência. A IA vai extrair a estrutura, estilo visual e prompt para criar novas publicações com o mesmo visual.
             </p>
 
             <div
@@ -262,14 +317,14 @@ export default function Templates() {
                 </div>
               ) : extractPreview ? (
                 <div className="space-y-2">
-                  <img src={extractPreview} alt="Preview" className="max-h-40 mx-auto rounded-md object-contain" />
+                  <img src={extractPreview} alt="Preview" className="max-h-48 mx-auto rounded-md object-contain" />
                   <p className="text-xs text-muted-foreground">Clique para trocar a imagem</p>
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-2">
                   <Upload className="w-8 h-8 text-muted-foreground" />
                   <p className="text-sm font-medium text-foreground">Clique para enviar uma imagem</p>
-                  <p className="text-xs text-muted-foreground">PNG, JPG ou WEBP · Máx. 20MB</p>
+                  <p className="text-xs text-muted-foreground">Post, carrossel ou estático · PNG, JPG, WEBP · Máx. 20MB</p>
                 </div>
               )}
             </div>
@@ -283,10 +338,16 @@ export default function Templates() {
                     <p className="text-xs text-foreground">{extractResult.description}</p>
                   </div>
                 )}
-                {extractResult.style && (
+                {extractResult.style?.mood && (
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-0.5">Estilo Visual</p>
-                    <p className="text-xs text-foreground">{extractResult.style}</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-0.5">Tom Visual</p>
+                    <p className="text-xs text-foreground">{extractResult.style.mood}</p>
+                  </div>
+                )}
+                {extractResult.style?.composition && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-0.5">Composição</p>
+                    <p className="text-xs text-foreground">{extractResult.style.composition}</p>
                   </div>
                 )}
                 {extractResult.contentType && (
@@ -298,7 +359,7 @@ export default function Templates() {
                 {extractResult.imagePromptToReplicate && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-0.5">Prompt para replicar o visual</p>
-                    <p className="text-xs text-foreground bg-muted p-2 rounded-sm line-clamp-3">{extractResult.imagePromptToReplicate}</p>
+                    <p className="text-xs text-foreground bg-muted p-2 rounded-sm line-clamp-4">{extractResult.imagePromptToReplicate}</p>
                   </div>
                 )}
                 {extractResult.suggestedCaption && (
