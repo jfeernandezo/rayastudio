@@ -13,6 +13,21 @@ export const insertUserSchema = createInsertSchema(users).pick({ username: true,
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export type DesignBrief = {
+  brandAdherence?: string;
+  mood?: string;
+  colorPreference?: string;
+  typographyPreference?: string;
+  infoHierarchy?: string;
+  imageType?: string;
+  layoutComplexity?: string;
+  styleReference?: string;
+  accessibility?: string;
+  mandatoryElements?: string[];
+  visualRestrictions?: string[];
+  additionalNotes?: string;
+};
+
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -20,6 +35,7 @@ export const projects = pgTable("projects", {
   clientName: text("client_name"),
   logoUrl: text("logo_url"),
   brandColors: jsonb("brand_colors").$type<{ dominant: string; secondary: string; accent: string } | null>().default(null),
+  designBrief: jsonb("design_brief").$type<DesignBrief | null>().default(null),
   niche: text("niche").array().default([]),
   formats: text("formats").array().default([]),
   rules: text("rules"),
