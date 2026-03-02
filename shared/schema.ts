@@ -48,6 +48,21 @@ export const insertProjectSchema = createInsertSchema(projects).omit({ id: true,
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
 
+export const projectFonts = pgTable("project_fonts", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  fileName: text("file_name").notNull(),
+  format: text("format").notNull(),
+  url: text("url").notNull(),
+  role: text("role"),
+  createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+});
+
+export const insertProjectFontSchema = createInsertSchema(projectFonts).omit({ id: true, createdAt: true });
+export type InsertProjectFont = z.infer<typeof insertProjectFontSchema>;
+export type ProjectFont = typeof projectFonts.$inferSelect;
+
 export const contentPieces = pgTable("content_pieces", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),

@@ -5,6 +5,9 @@ import { insertProjectSchema, insertContentPieceSchema, insertTemplateSchema, in
 import OpenAI from "openai";
 import multer from "multer";
 import { z } from "zod";
+import path from "path";
+import fs from "fs";
+import express from "express";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -13,7 +16,82 @@ const openai = new OpenAI({
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+const FONTS_DIR = path.join(process.cwd(), "uploads", "fonts");
+fs.mkdirSync(FONTS_DIR, { recursive: true });
+
+const fontStorage = multer.diskStorage({
+  destination: (req, _file, cb) => {
+    const dir = path.join(FONTS_DIR, req.params.id);
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+
+const fontUpload = multer({
+  storage: fontStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".ttf", ".otf", ".woff", ".woff2"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error("Formato inválido. Use TTF, OTF, WOFF ou WOFF2."));
+  },
+});
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+
+  app.use("/uploads/fonts", express.static(FONTS_DIR));
+
+  // --- PROJECT FONTS ---
+  app.get("/api/projects/:id/fonts", async (req, res) => {
+    try {
+      const fonts = await storage.getProjectFonts(Number(req.params.id));
+      res.json(fonts);
+    } catch (e) { res.status(500).json({ error: "Failed to fetch fonts" }); }
+  });
+
+  app.post("/api/projects/:id/fonts", fontUpload.single("font"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado" });
+      const projectId = Number(req.params.id);
+      const ext = path.extname(req.file.originalname).toLowerCase().replace(".", "");
+      const url = `/uploads/fonts/${projectId}/${req.file.filename}`;
+      const name = req.body.name || path.basename(req.file.originalname, path.extname(req.file.originalname));
+      const font = await storage.createProjectFont({
+        projectId,
+        name,
+        fileName: req.file.filename,
+        format: ext,
+        url,
+        role: req.body.role || null,
+      });
+      res.status(201).json(font);
+    } catch (e: any) { res.status(400).json({ error: e.message || "Failed to upload font" }); }
+  });
+
+  app.patch("/api/projects/:id/fonts/:fontId", async (req, res) => {
+    try {
+      const font = await storage.updateProjectFont(Number(req.params.fontId), req.body);
+      res.json(font);
+    } catch (e) { res.status(500).json({ error: "Failed to update font" }); }
+  });
+
+  app.delete("/api/projects/:id/fonts/:fontId", async (req, res) => {
+    try {
+      const fonts = await storage.getProjectFonts(Number(req.params.id));
+      const font = fonts.find(f => f.id === Number(req.params.fontId));
+      if (font) {
+        const filePath = path.join(FONTS_DIR, req.params.id, font.fileName);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+      await storage.deleteProjectFont(Number(req.params.fontId));
+      res.status(204).send();
+    } catch (e) { res.status(500).json({ error: "Failed to delete font" }); }
+  });
 
   // --- PROJECTS ---
   app.get("/api/projects", async (req, res) => {

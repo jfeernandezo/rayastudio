@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -12,9 +12,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ArrowLeft, Trash2, Settings, FileText, Copy, Check } from "lucide-react";
+import { Plus, ArrowLeft, Trash2, Settings, FileText, Copy, Check, Type, Upload, X } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { type Project, type ContentPiece, type DesignBrief } from "@shared/schema";
+import { type Project, type ContentPiece, type DesignBrief, type ProjectFont } from "@shared/schema";
+
+const FONT_ROLES = [
+  { value: "none", label: "Sem papel definido" },
+  { value: "h1", label: "H1 — Título principal" },
+  { value: "h2", label: "H2 — Subtítulo" },
+  { value: "body", label: "Corpo de texto" },
+  { value: "assets", label: "Assets / Elementos" },
+];
+
+function loadFontFace(font: ProjectFont) {
+  const styleId = `font-face-${font.id}`;
+  if (document.getElementById(styleId)) return;
+  const style = document.createElement("style");
+  style.id = styleId;
+  style.textContent = `@font-face { font-family: "${font.name}"; src: url("${font.url}"); }`;
+  document.head.appendChild(style);
+}
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -39,6 +56,11 @@ export default function ProjectDetail() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
+  const [fontsOpen, setFontsOpen] = useState(false);
+  const [fontName, setFontName] = useState("");
+  const [fontRole, setFontRole] = useState("none");
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fontFileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const { data: project, isLoading: loadingProject } = useQuery<Project>({ queryKey: ["/api/projects", id] });
@@ -49,6 +71,17 @@ export default function ProjectDetail() {
       return res.json();
     },
   });
+  const { data: fonts = [] } = useQuery<ProjectFont[]>({
+    queryKey: ["/api/projects", id, "fonts"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${id}/fonts`, { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    fonts.forEach(loadFontFace);
+  }, [fonts]);
 
   const contentForm = useForm({
     defaultValues: { projectId: Number(id), title: "", platform: "instagram", format: "post", status: "draft", notes: "", scheduledDate: "" },
@@ -108,6 +141,57 @@ export default function ProjectDetail() {
     },
     onError: () => toast({ title: "Erro ao salvar briefing", variant: "destructive" }),
   });
+
+  const uploadFontMutation = useMutation({
+    mutationFn: async ({ file, name, role }: { file: File; name: string; role: string }) => {
+      const formData = new FormData();
+      formData.append("font", file);
+      formData.append("name", name || file.name.replace(/\.[^.]+$/, ""));
+      if (role && role !== "none") formData.append("role", role);
+      const res = await fetch(`/api/projects/${id}/fonts`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Falha no upload");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "fonts"] });
+      setFontName("");
+      setFontRole("none");
+      if (fontFileRef.current) fontFileRef.current.value = "";
+      toast({ title: "Fonte enviada com sucesso!" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const updateFontRoleMutation = useMutation({
+    mutationFn: ({ fontId, role }: { fontId: number; role: string }) =>
+      apiRequest("PATCH", `/api/projects/${id}/fonts/${fontId}`, { role: role === "none" ? null : role }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "fonts"] }),
+    onError: () => toast({ title: "Erro ao atualizar papel da fonte", variant: "destructive" }),
+  });
+
+  const deleteFontMutation = useMutation({
+    mutationFn: (fontId: number) => apiRequest("DELETE", `/api/projects/${id}/fonts/${fontId}`),
+    onSuccess: (_, fontId) => {
+      const styleEl = document.getElementById(`font-face-${fontId}`);
+      if (styleEl) styleEl.remove();
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "fonts"] });
+      toast({ title: "Fonte removida" });
+    },
+    onError: () => toast({ title: "Erro ao remover fonte", variant: "destructive" }),
+  });
+
+  const handleFontUpload = (file: File) => {
+    if (!file) return;
+    const name = fontName || file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
+    uploadFontMutation.mutate({ file, name, role: fontRole });
+  };
 
   const openBrief = () => {
     if (!project) return;
@@ -234,6 +318,10 @@ export default function ProjectDetail() {
           </div>
           {project.clientName && <p className="text-sm text-muted-foreground">{project.clientName}</p>}
         </div>
+        <Button variant="outline" size="sm" onClick={() => setFontsOpen(true)} data-testid="button-project-fonts">
+          <Type className="w-4 h-4 mr-1" /> Fontes
+          {fonts.length > 0 && <span className="ml-1 text-xs bg-primary/15 text-primary rounded-full px-1.5">{fonts.length}</span>}
+        </Button>
         <Button variant="outline" size="sm" onClick={openBrief} data-testid="button-design-brief">
           <FileText className="w-4 h-4 mr-1" /> Briefing
         </Button>
@@ -708,6 +796,148 @@ export default function ProjectDetail() {
                 {updateDesignBriefMutation.isPending ? "Salvando..." : "Salvar Briefing"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={fontsOpen} onOpenChange={setFontsOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fontes do Projeto</DialogTitle>
+            <p className="text-xs text-muted-foreground">Suba TTF, OTF, WOFF ou WOFF2. Atribua o papel de cada fonte para que a IA e o designer saibam como usá-las.</p>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Adicionar nova fonte</h3>
+
+              <div className="space-y-2">
+                <Label>Nome da fonte</Label>
+                <Input
+                  placeholder="Ex: Playfair Display, Montserrat..."
+                  value={fontName}
+                  onChange={(e) => setFontName(e.target.value)}
+                  data-testid="input-font-name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Papel</Label>
+                <Select value={fontRole} onValueChange={setFontRole}>
+                  <SelectTrigger data-testid="select-font-role"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FONT_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${isDragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"}`}
+                onClick={() => fontFileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file) handleFontUpload(file);
+                }}
+                data-testid="dropzone-font"
+              >
+                <input
+                  ref={fontFileRef}
+                  type="file"
+                  accept=".ttf,.otf,.woff,.woff2"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFontUpload(f); }}
+                />
+                {uploadFontMutation.isPending ? (
+                  <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    Enviando...
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm font-medium">Arraste ou clique para selecionar</p>
+                    <p className="text-xs text-muted-foreground mt-1">TTF, OTF, WOFF, WOFF2 — máx. 10 MB</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {fonts.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fontes do projeto ({fonts.length})</h3>
+                <div className="space-y-2">
+                  {fonts.map(font => (
+                    <div key={font.id} className="flex items-center gap-3 p-3 border rounded-lg" data-testid={`font-card-${font.id}`}>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className="text-sm font-medium truncate"
+                          style={{ fontFamily: `"${font.name}", sans-serif` }}
+                          data-testid={`font-name-${font.id}`}
+                        >
+                          {font.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground uppercase">{font.format}</p>
+                        <p
+                          className="text-xs text-muted-foreground mt-0.5 truncate"
+                          style={{ fontFamily: `"${font.name}", sans-serif`, fontSize: "11px" }}
+                        >
+                          AaBbCcDdEe 0123456789
+                        </p>
+                      </div>
+                      <Select
+                        value={font.role || "none"}
+                        onValueChange={(v) => updateFontRoleMutation.mutate({ fontId: font.id, role: v })}
+                      >
+                        <SelectTrigger className="w-36 shrink-0 text-xs h-8" data-testid={`select-font-role-${font.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FONT_ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => deleteFontMutation.mutate(font.id)}
+                        disabled={deleteFontMutation.isPending}
+                        data-testid={`button-delete-font-${font.id}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-2">
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-1.5">Papéis atribuídos</h4>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {["h1", "h2", "body", "assets"].map(role => {
+                      const assigned = fonts.find(f => f.role === role);
+                      const roleLabel = FONT_ROLES.find(r => r.value === role)?.label.split(" — ")[1] || role;
+                      return (
+                        <div key={role} className={`text-xs p-2 rounded-md border ${assigned ? "border-primary/30 bg-primary/5" : "border-dashed text-muted-foreground"}`}>
+                          <span className="font-medium text-muted-foreground">{roleLabel}:</span>{" "}
+                          {assigned ? (
+                            <span style={{ fontFamily: `"${assigned.name}", sans-serif` }}>{assigned.name}</span>
+                          ) : (
+                            <span className="italic">não definido</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {fonts.length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-4">Nenhuma fonte adicionada ainda.</p>
+            )}
           </div>
         </DialogContent>
       </Dialog>
