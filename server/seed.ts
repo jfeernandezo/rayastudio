@@ -5,20 +5,12 @@ import { hashPassword } from "./auth";
 import { randomUUID } from "crypto";
 
 export async function seedDatabase() {
-  // Seed default user if no users exist
-  const existingUsers = await db.select().from(users);
-  if (existingUsers.length === 0) {
-    const hashed = await hashPassword("Adm#nexus26");
-    await db.insert(users).values([
-      { id: randomUUID(), username: "adm@v3nexus.com.br", password: hashed },
-    ]);
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("  Raya Studio — Primeiro acesso");
-    console.log("  Usuário: adm@v3nexus.com.br");
-    console.log("  Senha:   Adm#nexus26");
-    console.log("  (Altere em Configurações → Segurança)");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  }
+  // Always ensure the primary user exists with the correct password
+  const hashed = await hashPassword("Adm#nexus26");
+  await db.insert(users)
+    .values([{ id: randomUUID(), username: "adm@v3nexus.com.br", password: hashed }])
+    .onConflictDoUpdate({ target: users.username, set: { password: hashed } });
+  console.log("  Raya Studio — usuário principal sincronizado: adm@v3nexus.com.br");
 
   const existingProjects = await db.select().from(projects);
   if (existingProjects.length > 0) return;
