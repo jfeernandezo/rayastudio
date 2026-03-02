@@ -529,5 +529,39 @@ Retorne um JSON com array "posts" onde cada post tem:
     } catch (e) { res.status(500).json({ error: "Failed to generate calendar" }); }
   });
 
+  app.get("/api/settings", async (_req, res) => {
+    try {
+      const all = await storage.getSettings();
+      const masked: Record<string, string> = {};
+      for (const [k, v] of Object.entries(all)) {
+        if (v && (k.includes("token") || k.includes("secret"))) {
+          masked[k] = v.length > 8 ? `${"*".repeat(v.length - 4)}${v.slice(-4)}` : "****";
+        } else {
+          masked[k] = v;
+        }
+      }
+      const hasKeys: Record<string, boolean> = {};
+      for (const k of Object.keys(all)) { hasKeys[k] = !!all[k]; }
+      res.json({ settings: masked, connected: hasKeys });
+    } catch (e) { res.status(500).json({ error: "Failed to get settings" }); }
+  });
+
+  app.patch("/api/settings", async (req, res) => {
+    try {
+      const updates: Record<string, string | null> = req.body;
+      for (const [key, value] of Object.entries(updates)) {
+        await storage.setSetting(key, value);
+      }
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: "Failed to save settings" }); }
+  });
+
+  app.delete("/api/settings/:key", async (req, res) => {
+    try {
+      await storage.setSetting(req.params.key, null);
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: "Failed to delete setting" }); }
+  });
+
   return httpServer;
 }

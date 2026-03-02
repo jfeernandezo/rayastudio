@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  LayoutDashboard, FolderKanban, FileText, BookOpen, Zap, CalendarDays, ImagePlus
+  LayoutDashboard, FolderKanban, FileText, BookOpen, Zap, CalendarDays, ImagePlus, Settings2
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -15,6 +15,10 @@ const navItems = [
   { title: "Templates", url: "/templates", icon: FileText },
   { title: "Prompts", url: "/prompts", icon: Zap },
   { title: "Base de Conhecimento", url: "/knowledge", icon: BookOpen },
+];
+
+const bottomItems = [
+  { title: "Configurações", url: "/settings", icon: Settings2 },
 ];
 
 export function AppSidebar() {
@@ -99,8 +103,29 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="px-4 py-3 border-t border-sidebar-border">
-        <p className="text-xs text-muted-foreground/50">v1.0 · V3 Nexus</p>
+      <SidebarFooter className="border-t border-sidebar-border">
+        <SidebarGroup className="py-1">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {bottomItems.map((item) => {
+                const isActive = location.startsWith(item.url);
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive} data-testid={`nav-${item.title.toLowerCase()}`}>
+                      <Link href={item.url}>
+                        <item.icon className="w-4 h-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <div className="px-2 pb-3">
+          <p className="text-xs text-muted-foreground/50">v1.0 · V3 Nexus</p>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
