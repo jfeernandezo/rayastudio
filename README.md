@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="client/public/raya-logo.png" alt="Raya Studio" width="80" />
-</p>
-
 <h1 align="center">Raya Studio</h1>
 
 <p align="center">
