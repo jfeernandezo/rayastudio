@@ -12,6 +12,7 @@ Raya Studio is a social media content management platform built for digital agen
 - **Knowledge Base** — store brand knowledge (target audience, tone, references, etc.) per project
 - **Prompts** — save and reuse AI prompts categorized by type, platform, and format
 - **AI integrations** — OpenAI for caption generation, image generation (gpt-image-1), image analysis, voice chat, and batch processing
+- **Client Approval Links** — share a public link per content piece for client review; client can approve or request revision with a comment; the page shows brand colors and has no sidebar (fully public, no login required)
 
 The app is built as a monorepo with a React frontend (Vite) and an Express backend (Node.js), sharing types via a `shared/` folder. The UI is in Brazilian Portuguese.
 
@@ -48,6 +49,7 @@ Preferred communication style: Simple, everyday language.
 | `/knowledge` | Knowledge base |
 | `/prompts` | Prompts library |
 | `/calendar` | Content calendar |
+| `/approve/:token` | Client approval page (public, no sidebar) |
 
 ### Backend (Express + Node.js)
 
