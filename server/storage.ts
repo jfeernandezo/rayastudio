@@ -25,9 +25,11 @@ export interface IStorage {
 
   getContentPieces(projectId?: number): Promise<ContentPiece[]>;
   getContentPiece(id: number): Promise<ContentPiece | undefined>;
+  getContentByApprovalToken(token: string): Promise<ContentPiece | undefined>;
   createContentPiece(piece: InsertContentPiece): Promise<ContentPiece>;
   updateContentPiece(id: number, piece: Partial<InsertContentPiece>): Promise<ContentPiece>;
   deleteContentPiece(id: number): Promise<void>;
+  generateApprovalToken(id: number): Promise<ContentPiece>;
 
   getTemplates(projectId?: number): Promise<Template[]>;
   getTemplate(id: number): Promise<Template | undefined>;
@@ -96,6 +98,10 @@ export class DatabaseStorage implements IStorage {
     const [p] = await db.select().from(contentPieces).where(eq(contentPieces.id, id));
     return p;
   }
+  async getContentByApprovalToken(token: string) {
+    const [p] = await db.select().from(contentPieces).where(eq(contentPieces.approvalToken, token));
+    return p;
+  }
   async createContentPiece(piece: InsertContentPiece) {
     const [p] = await db.insert(contentPieces).values(piece).returning();
     return p;
@@ -106,6 +112,11 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteContentPiece(id: number) {
     await db.delete(contentPieces).where(eq(contentPieces.id, id));
+  }
+  async generateApprovalToken(id: number) {
+    const token = randomUUID();
+    const [p] = await db.update(contentPieces).set({ approvalToken: token }).where(eq(contentPieces.id, id)).returning();
+    return p;
   }
 
   async getTemplates(projectId?: number) {

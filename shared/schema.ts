@@ -47,6 +47,8 @@ export const contentPieces = pgTable("content_pieces", {
   notes: text("notes"),
   clickupTaskId: text("clickup_task_id"),
   extractedContent: text("extracted_content"),
+  approvalToken: text("approval_token").unique(),
+  approvalComment: text("approval_comment"),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
 });
 
