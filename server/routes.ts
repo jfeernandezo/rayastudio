@@ -302,23 +302,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- AI: GENERATE CAPTION ---
   app.post("/api/ai/caption", async (req, res) => {
     try {
-      const { projectContext, platform, format, template, topic, tone, knowledgeContext } = req.body;
+      const { projectContext, platform, format, template, topic, tone, knowledgeContext, carouselSlides } = req.body;
+
+      const isCarousel = format === "carrossel" || (carouselSlides && carouselSlides > 1);
 
       const systemPrompt = `Você é um especialista em marketing digital e criação de conteúdo para redes sociais. 
       Crie conteúdo em português brasileiro, direto, autêntico e envolvente.
       ${projectContext ? `Contexto do projeto: ${projectContext}` : ""}
       ${knowledgeContext ? `Base de conhecimento: ${knowledgeContext}` : ""}`;
 
+      const carouselInstructions = isCarousel && carouselSlides
+        ? `\nEste é um CARROSSEL com ${carouselSlides} slides. A legenda deve:
+        1. Ter um HOOK forte na primeira linha (para parar o scroll)
+        2. Convidar a deslizar ("Deslize para ver →" ou variação)
+        3. Resumir brevemente o que o usuário vai aprender/ver em cada slide
+        4. Terminar com CTA claro (comentário, salvar, seguir, etc.)
+        Se um template foi fornecido, siga a estrutura de slides indicada nele.`
+        : "";
+
       const userPrompt = `Crie uma legenda para ${platform === "instagram" ? "Instagram" : "LinkedIn"} 
-      Formato: ${format}
+      Formato: ${isCarousel ? `Carrossel (${carouselSlides || "múltiplos"} slides)` : format}
       Tópico: ${topic}
       Tom: ${tone || "profissional e engajante"}
       ${template ? `Use este template como base: ${template}` : ""}
+      ${carouselInstructions}
       
       Retorne um JSON com:
-      - caption: a legenda completa
+      - caption: a legenda completa (com estrutura de carrossel se aplicável)
       - hashtags: string com hashtags relevantes
-      - imagePrompt: descrição em inglês para gerar uma imagem complementar`;
+      - imagePrompt: descrição em inglês para gerar o slide 1 do carrossel${isCarousel ? " (slide de capa, deve ser o mais atrativo visualmente)" : " ou imagem complementar"}`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-5.1",
@@ -407,14 +419,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             imageContent,
             {
               type: "text",
-              text: `Analise esta imagem em detalhes para replicar o estilo de conteúdo. Retorne um JSON com:
+              text: `Analise esta imagem em detalhes para replicar o estilo de conteúdo para redes sociais. Retorne um JSON com:
               - description: descrição detalhada da imagem
-              - style: estilo visual (cores, composição, mood)
-              - contentType: tipo de conteúdo (produto, lifestyle, corporativo, etc)
-              - copyElements: elementos de texto visíveis
+              - style: objeto com { colors: string[], composition: string, mood: string, typography: string, graphicElements: string }
+              - contentType: tipo de conteúdo (produto, lifestyle, corporativo, marketing digital, etc)
+              - contentStructure: "carousel" se parecer um slide de carrossel (tem numeração de páginas, setas, "deslize", estrutura sequencial, etc) ou "static" se for uma imagem única
+              - isCarousel: true se for um slide de carrossel, false se for estático
+              - slideCount: número estimado de slides se for carrossel (baseado em indicadores visuais como paginação "1/8", bolinhas, setas, texto "deslize"), null se não for carrossel
+              - copyElements: array de strings com todos os elementos de texto visíveis na imagem
               - targetAudience: público-alvo provável
-              - suggestedCaption: sugestão de legenda em português
-              - imagePromptToReplicate: prompt em inglês para replicar este estilo de imagem`
+              - suggestedCaption: sugestão de legenda em português baseada no conteúdo
+              - imagePromptToReplicate: prompt detalhado em inglês para replicar este estilo visual exato em novas imagens`
             }
           ]
         }],
