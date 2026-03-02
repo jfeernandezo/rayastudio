@@ -33,13 +33,36 @@ function loadFontFace(font: ProjectFont) {
   document.head.appendChild(style);
 }
 
+const KANBAN_STATUSES = [
+  { key: "draft",     label: "À Fazer",     labelShort: "À Fazer" },
+  { key: "review",    label: "Em Revisão",  labelShort: "Revisão" },
+  { key: "approved",  label: "Aprovado",    labelShort: "Aprovado" },
+  { key: "scheduled", label: "Agendado",    labelShort: "Agendado" },
+  { key: "published", label: "Publicado",   labelShort: "Publicado" },
+] as const;
+
+type ContentStatus = typeof KANBAN_STATUSES[number]["key"];
+
 const statusColors: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground",
-  review: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  approved: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  draft:     "bg-slate-100 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400",
+  review:    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  approved:  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  scheduled: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
   published: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
 };
-const statusLabels: Record<string, string> = { draft: "Rascunho", review: "Revisão", approved: "Aprovado", published: "Publicado" };
+
+const statusDotColors: Record<string, string> = {
+  draft:     "bg-slate-400",
+  review:    "bg-amber-400",
+  approved:  "bg-green-500",
+  scheduled: "bg-violet-500",
+  published: "bg-blue-500",
+};
+
+const statusLabels: Record<string, string> = {
+  draft: "À Fazer", review: "Em Revisão", approved: "Aprovado",
+  scheduled: "Agendado", published: "Publicado",
+};
 const formatLabels: Record<string, string> = { post: "Post", story: "Story", carrossel: "Carrossel", reels: "Reels" };
 
 function getBrandColors(raw: any): { dominant: string; secondary: string; accent: string } | null {
@@ -117,6 +140,13 @@ export default function ProjectDetail() {
   const deleteContentMutation = useMutation({
     mutationFn: (contentId: number) => apiRequest("DELETE", `/api/content/${contentId}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/content"] }); toast({ title: "Conteúdo removido" }); },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ contentId, status }: { contentId: number; status: string }) =>
+      apiRequest("PATCH", `/api/content/${contentId}`, { status }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/content"] }); },
+    onError: () => toast({ title: "Erro ao atualizar status", variant: "destructive" }),
   });
 
   const updateProjectMutation = useMutation({
@@ -282,12 +312,9 @@ export default function ProjectDetail() {
     <div className="p-6"><p className="text-muted-foreground">Projeto não encontrado.</p></div>
   );
 
-  const grouped = {
-    draft: content.filter(c => c.status === "draft"),
-    review: content.filter(c => c.status === "review"),
-    approved: content.filter(c => c.status === "approved"),
-    published: content.filter(c => c.status === "published"),
-  };
+  const grouped = Object.fromEntries(
+    KANBAN_STATUSES.map(s => [s.key, content.filter(c => c.status === s.key)])
+  ) as Record<ContentStatus, ContentPiece[]>;
 
   const palette = getBrandColors(project.brandColors);
 
@@ -359,66 +386,120 @@ export default function ProjectDetail() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {Object.entries(grouped).map(([status, items]) => (
-          <Card key={status}>
-            <CardContent className="p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1">{statusLabels[status]}</p>
-              <p className="text-2xl font-bold text-foreground">{items.length}</p>
+      {/* Stats bar */}
+      <div className="grid grid-cols-5 gap-2">
+        {KANBAN_STATUSES.map(({ key, labelShort }) => (
+          <Card key={key} className="no-card-lift">
+            <CardContent className="px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[key]}`} />
+                <p className="text-[11px] font-medium text-muted-foreground truncate">{labelShort}</p>
+              </div>
+              <p className="text-xl font-bold text-foreground">{(grouped[key as ContentStatus] || []).length}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid md:grid-cols-4 gap-4 items-start">
-        {Object.entries(grouped).map(([status, items]) => (
-          <div key={status} className="space-y-2">
-            <div className="flex items-center gap-2 pb-1 border-b border-border">
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-sm ${statusColors[status]}`}>
-                {statusLabels[status]}
-              </span>
-              <span className="text-xs text-muted-foreground ml-auto">{items.length}</span>
-            </div>
-            {loadingContent ? (
-              <Skeleton className="h-20 rounded-md" />
-            ) : items.length === 0 ? (
-              <div className="border border-dashed border-border rounded-md p-4 text-center">
-                <p className="text-xs text-muted-foreground">Nenhum item</p>
+      {/* Kanban board */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
+        {KANBAN_STATUSES.map(({ key, label }) => {
+          const items = grouped[key as ContentStatus] || [];
+          return (
+            <div key={key} className="min-w-0 space-y-2">
+              {/* Column header */}
+              <div className="flex items-center gap-2 px-1 pb-2 border-b border-border">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[key]}`} />
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex-1 truncate">{label}</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{items.length}</span>
               </div>
-            ) : (
-              items.map((item) => (
-                <div key={item.id} className="group border border-card-border bg-card rounded-md p-3 space-y-2 hover-elevate cursor-pointer" data-testid={`content-item-${item.id}`}>
-                  <Link href={`/projects/${id}/content/${item.id}`}>
-                    <div>
-                      {item.imageUrl && (
-                        <div className="rounded-sm overflow-hidden mb-2">
-                          <img src={item.imageUrl} alt={item.title} className="w-full h-20 object-cover" />
-                        </div>
-                      )}
-                      <p className="text-xs font-medium text-foreground line-clamp-2">{item.title}</p>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span className="text-xs text-muted-foreground">{item.platform === "instagram" ? "IG" : "LI"}</span>
-                        <span className="text-muted-foreground text-xs">·</span>
-                        <span className="text-xs text-muted-foreground">{formatLabels[item.format] || item.format}</span>
-                        {item.scheduledDate && (
-                          <>
-                            <span className="text-muted-foreground text-xs">·</span>
-                            <span className="text-xs text-muted-foreground">{item.scheduledDate}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                  <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => deleteContentMutation.mutate(item.id)}>
-                      <Trash2 className="w-3 h-3 text-muted-foreground" />
-                    </Button>
-                  </div>
+
+              {loadingContent ? (
+                <Skeleton className="h-20 rounded-xl" />
+              ) : items.length === 0 ? (
+                <div className="border border-dashed border-border/60 rounded-xl p-4 text-center">
+                  <p className="text-[11px] text-muted-foreground/60">Nenhum item</p>
                 </div>
-              ))
-            )}
-          </div>
-        ))}
+              ) : (
+                items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="group bg-card border border-card-border rounded-xl p-3 space-y-2.5 shadow-2xs card-lift"
+                    data-testid={`content-item-${item.id}`}
+                  >
+                    {/* Thumbnail */}
+                    {item.imageUrl && (
+                      <Link href={`/projects/${id}/content/${item.id}`}>
+                        <div className="rounded-lg overflow-hidden -mx-0.5">
+                          <img src={item.imageUrl} alt={item.title} className="w-full h-24 object-cover" />
+                        </div>
+                      </Link>
+                    )}
+
+                    {/* Title + meta */}
+                    <Link href={`/projects/${id}/content/${item.id}`}>
+                      <div className="space-y-1 cursor-pointer">
+                        <p className="text-[12px] font-medium text-foreground line-clamp-2 leading-snug">{item.title}</p>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-[10px] text-muted-foreground bg-muted rounded px-1 py-0.5">
+                            {item.platform === "instagram" ? "IG" : "LI"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground bg-muted rounded px-1 py-0.5">
+                            {formatLabels[item.format] || item.format}
+                          </span>
+                          {item.scheduledDate && (
+                            <span className="text-[10px] text-muted-foreground bg-muted rounded px-1 py-0.5">
+                              {item.scheduledDate}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+
+                    {/* Status dropdown + delete */}
+                    <div className="flex items-center gap-1.5 pt-0.5 border-t border-border/50">
+                      <div className="flex-1" onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={item.status}
+                          onValueChange={(v) => updateStatusMutation.mutate({ contentId: item.id, status: v })}
+                        >
+                          <SelectTrigger
+                            className="h-6 text-[10px] px-1.5 border-0 bg-transparent shadow-none focus:ring-0 w-full"
+                            data-testid={`select-status-${item.id}`}
+                          >
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDotColors[item.status] || "bg-slate-400"}`} />
+                              <SelectValue />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent onClick={(e) => e.stopPropagation()}>
+                            {KANBAN_STATUSES.map(s => (
+                              <SelectItem key={s.key} value={s.key}>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-2 h-2 rounded-full ${statusDotColors[s.key]}`} />
+                                  {s.label}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-5 h-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); deleteContentMutation.mutate(item.id); }}
+                        data-testid={`button-delete-content-${item.id}`}
+                      >
+                        <Trash2 className="w-3 h-3 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <Dialog open={newContentOpen} onOpenChange={setNewContentOpen}>
