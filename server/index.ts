@@ -1,3 +1,5 @@
+import "./dns-fix";
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -63,6 +65,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const { waitForDb } = await import("./db");
+  await waitForDb();
   await seedDatabase().catch(console.error);
   setupAuth(app);
   await registerRoutes(httpServer, app);
@@ -99,7 +103,6 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`serving on port ${port}`);
