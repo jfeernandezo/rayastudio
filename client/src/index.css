@@ -269,6 +269,13 @@
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
   }
+  .no-card-lift {
+    transition: none !important;
+  }
+  .no-card-lift:hover {
+    transform: none !important;
+    box-shadow: var(--shadow-2xs) !important;
+  }
 
   /* ── Orange glow ── */
   .glow-orange {
