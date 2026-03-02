@@ -4,8 +4,9 @@ import { useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import {
   LayoutDashboard, Briefcase, CalendarDays, LayoutTemplate,
-  BrainCircuit, Lightbulb, Library, Settings2, Sparkles, LogOut, User
+  BrainCircuit, Lightbulb, Library, Settings2, LogOut, User
 } from "lucide-react";
+import rayaLogo from "@assets/raya_1772472529742.png";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarMenu, SidebarMenuItem, SidebarHeader, SidebarFooter
@@ -67,23 +68,16 @@ export function AppSidebar({ username }: { username: string }) {
         <div className="flex items-center gap-3">
           <button
             onClick={() => fileRef.current?.click()}
-            className="w-9 h-9 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 transition-all group
-              bg-gradient-to-br from-orange-400 to-orange-600
-              shadow-[0_2px_8px_rgba(249,115,22,0.35),0_0_0_1px_rgba(249,115,22,0.15),inset_0_1px_0_rgba(255,255,255,0.3)]
-              hover:shadow-[0_4px_14px_rgba(249,115,22,0.45),0_0_0_1px_rgba(249,115,22,0.2),inset_0_1px_0_rgba(255,255,255,0.3)]"
-            title="Clique para adicionar a logo"
+            className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden shrink-0 transition-opacity hover:opacity-80 border border-border bg-white dark:bg-white"
+            title="Clique para trocar a logo"
             data-testid="button-upload-logo"
           >
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-            {logo ? (
-              <img src={logo} alt="Logo" className="w-full h-full object-contain" />
-            ) : (
-              <Sparkles className="w-4 h-4 text-white drop-shadow-sm" />
-            )}
+            <img src={logo ?? rayaLogo} alt="Raya Studio" className="w-full h-full object-contain p-0.5" />
           </button>
           <div className="leading-tight">
-            <p className="text-[13.5px] font-bold text-foreground tracking-tight">Raya Studio</p>
-            <p className="text-[10.5px] text-muted-foreground leading-none mt-0.5">Creative AI Platform</p>
+            <p style={{ fontFamily: "'Brume', sans-serif" }} className="text-[15px] text-foreground tracking-wide">Raya Studio</p>
+            <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Explore sua Criatividade</p>
           </div>
         </div>
       </SidebarHeader>
