@@ -73,7 +73,7 @@ const PROVIDERS = [
   },
 ];
 
-type Tab = "geral" | "ia" | "integracoes";
+type Tab = "geral" | "ia" | "integracoes" | "seguranca";
 
 function ConnectionBadge({ connected }: { connected: boolean }) {
   return connected ? (
@@ -150,16 +150,25 @@ export default function Settings() {
   });
 
   const changePasswordMutation = useMutation({
-    mutationFn: (d: { currentPassword: string; newPassword: string }) =>
-      apiRequest("POST", "/api/account/change-password", d),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/account"] });
-      setPasswordForm({ current: "", new: "", confirm: "" });
-      toast({ title: "Senha alterada com sucesso" });
+    mutationFn: async (d: { currentPassword: string; newPassword: string }) => {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(d),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Erro ao alterar senha");
+      }
+      return res.json();
     },
-    onError: async (err: any) => {
-      const body = await err?.response?.json().catch(() => ({})) ?? {};
-      toast({ title: body.error || "Erro ao alterar senha", variant: "destructive" });
+    onSuccess: () => {
+      setPasswordForm({ current: "", new: "", confirm: "" });
+      toast({ title: "Senha alterada com sucesso!" });
+    },
+    onError: (e: Error) => {
+      toast({ title: e.message || "Erro ao alterar senha", variant: "destructive" });
     },
   });
 
@@ -214,6 +223,7 @@ export default function Settings() {
     { key: "geral", label: "Geral" },
     { key: "ia", label: "Inteligência Artificial" },
     { key: "integracoes", label: "Integrações" },
+    { key: "seguranca", label: "Segurança" },
   ];
 
   return (
@@ -304,90 +314,6 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="border-t border-border" />
-
-              {/* Senha */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-foreground">Senha</p>
-                  {account?.hasPassword && (
-                    <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Definida
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  {account?.hasPassword && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Senha atual</Label>
-                      <div className="relative">
-                        <Input
-                          type={showPass.current ? "text" : "password"}
-                          placeholder="••••••••"
-                          value={passwordForm.current}
-                          onChange={e => setPasswordForm(p => ({ ...p, current: e.target.value }))}
-                          className="h-9 pr-9"
-                          data-testid="input-current-password"
-                        />
-                        <button type="button" onClick={() => setShowPass(p => ({ ...p, current: !p.current }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                          {showPass.current ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">{account?.hasPassword ? "Nova senha" : "Definir senha"}</Label>
-                      <div className="relative">
-                        <Input
-                          type={showPass.new ? "text" : "password"}
-                          placeholder="Mínimo 6 caracteres"
-                          value={passwordForm.new}
-                          onChange={e => setPasswordForm(p => ({ ...p, new: e.target.value }))}
-                          className="h-9 pr-9"
-                          data-testid="input-new-password"
-                        />
-                        <button type="button" onClick={() => setShowPass(p => ({ ...p, new: !p.new }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                          {showPass.new ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Confirmar senha</Label>
-                      <div className="relative">
-                        <Input
-                          type={showPass.confirm ? "text" : "password"}
-                          placeholder="Repita a senha"
-                          value={passwordForm.confirm}
-                          onChange={e => setPasswordForm(p => ({ ...p, confirm: e.target.value }))}
-                          className="h-9 pr-9"
-                          data-testid="input-confirm-password"
-                          onKeyDown={e => { if (e.key === "Enter") handlePasswordSubmit(); }}
-                        />
-                        <button type="button" onClick={() => setShowPass(p => ({ ...p, confirm: !p.confirm }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                          {showPass.confirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {passwordForm.new && passwordForm.confirm && passwordForm.new !== passwordForm.confirm && (
-                    <p className="text-xs text-destructive flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" /> As senhas não coincidem
-                    </p>
-                  )}
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      onClick={handlePasswordSubmit}
-                      disabled={changePasswordMutation.isPending || !passwordForm.new || !passwordForm.confirm}
-                      data-testid="button-change-password"
-                    >
-                      <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-                      {changePasswordMutation.isPending ? "Salvando..." : account?.hasPassword ? "Alterar senha" : "Definir senha"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
             </div>
 
           ) : tab === "ia" ? (
@@ -551,7 +477,7 @@ export default function Settings() {
               </div>
             </div>
 
-          ) : (
+          ) : tab === "integracoes" ? (
             /* Integrações tab */
             <div className="space-y-6">
               {/* ClickUp */}
@@ -712,7 +638,91 @@ export default function Settings() {
                 </div>
               </div>
             </div>
-          )}
+          ) : tab === "seguranca" ? (
+            <div className="space-y-7">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">{account?.hasPassword ? "Alterar senha" : "Definir senha"}</p>
+                  {account?.hasPassword && (
+                    <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Definida
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  {account?.hasPassword && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Senha atual</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPass.current ? "text" : "password"}
+                          placeholder="••••••••"
+                          value={passwordForm.current}
+                          onChange={e => setPasswordForm(p => ({ ...p, current: e.target.value }))}
+                          className="h-9 pr-9"
+                          data-testid="input-current-password"
+                        />
+                        <button type="button" onClick={() => setShowPass(p => ({ ...p, current: !p.current }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showPass.current ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">{account?.hasPassword ? "Nova senha" : "Definir senha"}</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPass.new ? "text" : "password"}
+                          placeholder="Mínimo 6 caracteres"
+                          value={passwordForm.new}
+                          onChange={e => setPasswordForm(p => ({ ...p, new: e.target.value }))}
+                          className="h-9 pr-9"
+                          data-testid="input-new-password"
+                        />
+                        <button type="button" onClick={() => setShowPass(p => ({ ...p, new: !p.new }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showPass.new ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Confirmar senha</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPass.confirm ? "text" : "password"}
+                          placeholder="Repita a senha"
+                          value={passwordForm.confirm}
+                          onChange={e => setPasswordForm(p => ({ ...p, confirm: e.target.value }))}
+                          className="h-9 pr-9"
+                          data-testid="input-confirm-password"
+                          onKeyDown={e => { if (e.key === "Enter") handlePasswordSubmit(); }}
+                        />
+                        <button type="button" onClick={() => setShowPass(p => ({ ...p, confirm: !p.confirm }))} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showPass.confirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  {passwordForm.new && passwordForm.confirm && passwordForm.new !== passwordForm.confirm && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> As senhas não coincidem
+                    </p>
+                  )}
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={handlePasswordSubmit}
+                      disabled={changePasswordMutation.isPending || !passwordForm.new || !passwordForm.confirm}
+                      data-testid="button-change-password"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 mr-1.5" />
+                      {changePasswordMutation.isPending ? "Salvando..." : account?.hasPassword ? "Alterar senha" : "Definir senha"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
