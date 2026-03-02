@@ -141,6 +141,7 @@ export type Prompt = typeof prompts.$inferSelect;
 export const agentProfiles = pgTable("agent_profiles", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+  agentType: text("agent_type").default("estrategia"),
   name: text("name").notNull(),
   description: text("description"),
   personaDescription: text("persona_description"),
@@ -158,6 +159,13 @@ export const agentProfiles = pgTable("agent_profiles", {
   forbiddenWords: text("forbidden_words").array().default([]),
   hookStyle: text("hook_style"),
   ctaStyle: text("cta_style"),
+  visualMood: text("visual_mood"),
+  colorApproach: text("color_approach"),
+  typographyStyle: text("typography_style"),
+  layoutPreferences: text("layout_preferences"),
+  graphicElements: text("graphic_elements"),
+  referenceImages: text("reference_images").array().default([]),
+  extractedVisualStyle: text("extracted_visual_style"),
   isGlobal: boolean("is_global").default(true),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
 });

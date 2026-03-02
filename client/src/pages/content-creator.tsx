@@ -12,8 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw, BookOpen, Zap, Share2, ImageIcon, Layers } from "lucide-react";
-import type { Project, ContentPiece, Template, KnowledgeBase, Prompt } from "@shared/schema";
+import { ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw, BookOpen, Zap, Share2, ImageIcon, Layers, Palette } from "lucide-react";
+import type { Project, ContentPiece, Template, KnowledgeBase, Prompt, AgentProfile } from "@shared/schema";
 
 const statusOptions = [
   { value: "draft", label: "Rascunho" },
@@ -29,6 +29,7 @@ export default function ContentCreator() {
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState("profissional e engajante");
   const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
+  const [selectedDesignAgent, setSelectedDesignAgent] = useState<string>("none");
   const [generatingCaption, setGeneratingCaption] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
 
@@ -54,6 +55,10 @@ export default function ContentCreator() {
     },
   });
   const { data: prompts = [] } = useQuery<Prompt[]>({ queryKey: ["/api/prompts"] });
+  const { data: agentProfiles = [] } = useQuery<AgentProfile[]>({ queryKey: ["/api/agent-profiles"] });
+
+  const designAgents = agentProfiles.filter(a => a.agentType === "criacao");
+  const selectedDesignAgentObj = designAgents.find(a => a.id === Number(selectedDesignAgent));
 
   const selectedTemplateObj = templates.find(t => t.id === Number(selectedTemplate));
 
@@ -139,6 +144,7 @@ export default function ContentCreator() {
     }
     setGeneratingImage(true);
     try {
+      const designAgent = selectedDesignAgentObj;
       const res = await fetch("/api/ai/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,6 +154,16 @@ export default function ContentCreator() {
           format: form.format,
           brandColors: (project as any)?.brandColors,
           designBrief: (project as any)?.designBrief,
+          designAgent: designAgent ? {
+            visualMood: designAgent.visualMood,
+            colorApproach: designAgent.colorApproach,
+            typographyStyle: designAgent.typographyStyle,
+            layoutPreferences: designAgent.layoutPreferences,
+            graphicElements: designAgent.graphicElements,
+            extractedVisualStyle: designAgent.extractedVisualStyle,
+            restrictions: designAgent.restrictions,
+            referencePersonas: designAgent.referencePersonas,
+          } : null,
         }),
       });
       const data = await res.json();
@@ -379,6 +395,34 @@ export default function ContentCreator() {
               <div className="relative">
                 <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
                 <div className="relative flex justify-center"><span className="bg-background px-2 text-xs text-muted-foreground">imagem</span></div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Agente de Design</Label>
+                <Select value={selectedDesignAgent} onValueChange={setSelectedDesignAgent}>
+                  <SelectTrigger className="h-8" data-testid="select-design-agent">
+                    <SelectValue placeholder="Sem agente — usar briefing do projeto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem agente — usar briefing do projeto</SelectItem>
+                    {designAgents.map(a => (
+                      <SelectItem key={a.id} value={String(a.id)}>{a.name}{a.description ? ` — ${a.description}` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedDesignAgentObj && (
+                  <div className="flex items-start gap-2 p-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/10 mt-1">
+                    <Palette className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{selectedDesignAgentObj.name}</p>
+                      {selectedDesignAgentObj.visualMood && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{selectedDesignAgentObj.visualMood}</p>}
+                      {selectedDesignAgentObj.extractedVisualStyle && <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">✓ Estilo extraído de referências reais</p>}
+                    </div>
+                  </div>
+                )}
+                {designAgents.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Nenhum agente de design cadastrado. <a href="/agents" className="text-primary underline">Criar agente</a></p>
+                )}
               </div>
 
               <div className="space-y-1">

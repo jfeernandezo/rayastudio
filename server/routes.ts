@@ -381,7 +381,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- AI: GENERATE IMAGE ---
   app.post("/api/ai/image", async (req, res) => {
     try {
-      const { prompt, platform, format, brandColors, style, designBrief } = req.body;
+      const { prompt, platform, format, brandColors, style, designBrief, designAgent } = req.body;
 
       const briefLines: string[] = [];
       if (designBrief) {
@@ -400,12 +400,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const briefContext = briefLines.length > 0 ? briefLines.join(". ") + "." : "";
 
-      const enhancedPrompt = `${prompt}. 
-      ${platform === "instagram" ? "Square or portrait format, highly visual, Instagram-worthy" : "Professional, LinkedIn appropriate, clean and modern"}.
-      ${style ? `Style: ${style}` : ""}
-      ${brandColors?.dominant ? `Brand colors — dominant: ${brandColors.dominant}, secondary: ${brandColors.secondary}, accent: ${brandColors.accent}. Apply the 60-30-10 color rule.` : brandColors?.length ? `Use these brand colors: ${brandColors.join(", ")}` : ""}
-      ${briefContext}
-      High quality, professional marketing image for social media.`;
+      const agentLines: string[] = [];
+      if (designAgent) {
+        const da = designAgent as Record<string, any>;
+        if (da.extractedVisualStyle) agentLines.push(`EXTRACTED VISUAL STYLE FROM REAL REFERENCES:\n${da.extractedVisualStyle}`);
+        if (da.visualMood) agentLines.push(`Visual mood & aesthetic: ${da.visualMood}`);
+        if (da.colorApproach) agentLines.push(`Color approach: ${da.colorApproach}`);
+        if (da.typographyStyle) agentLines.push(`Typography: ${da.typographyStyle}`);
+        if (da.layoutPreferences) agentLines.push(`Layout & composition: ${da.layoutPreferences}`);
+        if (da.graphicElements) agentLines.push(`Graphic elements: ${da.graphicElements}`);
+        if (da.referencePersonas) agentLines.push(`Design references (replicate style): ${da.referencePersonas}`);
+        if (da.restrictions?.length) agentLines.push(`STRICTLY AVOID: ${Array.isArray(da.restrictions) ? da.restrictions.join(", ") : da.restrictions}`);
+      }
+      const agentContext = agentLines.length > 0 ? agentLines.join("\n") : "";
+
+      const enhancedPrompt = [
+        prompt,
+        platform === "instagram"
+          ? "Square or portrait format, highly visual, Instagram-worthy."
+          : "Professional, LinkedIn appropriate, clean and modern.",
+        style ? `Style: ${style}` : "",
+        brandColors?.dominant
+          ? `Brand colors — dominant: ${brandColors.dominant}, secondary: ${brandColors.secondary}, accent: ${brandColors.accent}. Apply the 60-30-10 color rule.`
+          : brandColors?.length ? `Use these brand colors: ${brandColors.join(", ")}` : "",
+        briefContext,
+        agentContext,
+        "High quality, professional marketing image for social media.",
+      ].filter(Boolean).join("\n");
 
       const size = platform === "instagram" && format === "story" ? "1024x1024" : "1024x1024";
 
