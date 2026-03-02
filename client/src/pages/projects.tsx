@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FolderKanban, ArrowRight, Trash2, Settings, X } from "lucide-react";
+import { Plus, FolderKanban, ArrowRight, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProjectSchema, type Project } from "@shared/schema";
@@ -142,12 +142,22 @@ export default function Projects() {
                         </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="flex items-center gap-2 mt-3 flex-wrap">
                       <Button variant="outline" size="sm" asChild className="h-7 text-xs">
                         <Link href={`/projects/${project.id}`}>
                           Abrir projeto <ArrowRight className="w-3 h-3 ml-1" />
                         </Link>
                       </Button>
+                      {(project as any).clickupListId && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[#7B68EE]/10 text-[#7B68EE] font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#7B68EE]" /> ClickUp
+                        </span>
+                      )}
+                      {(project as any).metaInstagramAccountId && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Meta
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
