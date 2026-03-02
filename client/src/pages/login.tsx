@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Sparkles, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
+import rayaLogo from "@assets/raya_1772472529742.png";
 
 export default function LoginPage() {
   const [, navigate] = useLocation();
@@ -52,13 +53,15 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm space-y-6">
         {/* Logo */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-14 h-14 rounded-3xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-[0_4px_20px_rgba(249,115,22,0.4),inset_0_1px_0_rgba(255,255,255,0.3)]">
-            <Sparkles className="w-6 h-6 text-white drop-shadow-sm" />
-          </div>
+        <div className="flex flex-col items-center gap-4">
+          <img
+            src={rayaLogo}
+            alt="Raya Studio"
+            className="w-20 h-20 object-contain"
+          />
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Raya Studio</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Creative AI Platform</p>
+            <h1 style={{ fontFamily: "'Brume', sans-serif" }} className="text-3xl text-foreground tracking-wide">Raya Studio</h1>
+            <p className="text-sm text-muted-foreground mt-1">Explore sua Criatividade</p>
           </div>
         </div>
 
