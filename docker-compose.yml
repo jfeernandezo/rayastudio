@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: raya-studio-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5000}:5000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-raya}:${POSTGRES_PASSWORD:-raya_dev_password}@postgres:5432/${POSTGRES_DB:-raya}
+      DATABASE_SSL: "false"
+      NODE_ENV: production
+      PORT: 5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - raya_uploads:/app/uploads
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: raya-studio-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-raya}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-raya_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-raya}
+    ports:
+      - "5434:5432"
+    volumes:
+      - raya_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-raya} -d ${POSTGRES_DB:-raya}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  raya_postgres_data:
+  raya_uploads:

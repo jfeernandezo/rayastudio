@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FolderKanban, ArrowRight, Trash2 } from "lucide-react";
+import { Plus, FolderKanban, ArrowRight, Trash2, Palette, MessageSquareText } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProjectSchema, type Project } from "@shared/schema";
@@ -54,11 +54,12 @@ export default function Projects() {
   });
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="page-shell space-y-6">
+      <div className="page-heading">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Projetos</h1>
-          <p className="text-sm text-muted-foreground">Gerencie os projetos dos seus clientes</p>
+          <p className="text-xs font-semibold uppercase text-primary">Clientes</p>
+          <h1 className="page-title">Projetos</h1>
+          <p className="page-subtitle">Cada projeto guarda contexto, marca, briefing e produção de conteúdo.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -71,6 +72,14 @@ export default function Projects() {
             <DialogHeader>
               <DialogTitle>Criar Projeto</DialogTitle>
             </DialogHeader>
+            <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/40 p-2 text-center">
+              {["Cliente", "Marca", "Esteira"].map((step, index) => (
+                <div key={step} className="rounded-lg bg-background/80 px-2 py-2 border">
+                  <p className="text-[10px] text-primary font-bold">{index + 1}</p>
+                  <p className="text-xs font-medium">{step}</p>
+                </div>
+              ))}
+            </div>
             <form onSubmit={form.handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
               <div className="space-y-1">
                 <Label htmlFor="name">Nome do Projeto *</Label>
@@ -101,8 +110,8 @@ export default function Projects() {
       </div>
 
       {isLoading ? (
-        <div className="grid md:grid-cols-2 gap-3">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24 rounded-md" />)}
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
         </div>
       ) : projects.length === 0 ? (
         <Card>
@@ -112,12 +121,13 @@ export default function Projects() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid md:grid-cols-2 gap-3">
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
           {projects.map((project) => (
-            <Card key={project.id} className="group" data-testid={`project-${project.id}`}>
+            <Card key={project.id} className="group overflow-hidden border-border/80" data-testid={`project-${project.id}`}>
+              <div className="h-1.5 bg-primary/70" style={{ backgroundColor: ((project as any).brandColors?.accent || (project as any).brandColors?.dominant || undefined) }} />
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                     <FolderKanban className="w-4 h-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -142,8 +152,22 @@ export default function Projects() {
                         </Button>
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-2 mt-4">
+                      <div className="rounded-lg bg-muted/45 border p-2">
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <Palette className="w-3 h-3" /> Marca
+                        </div>
+                        <p className="text-xs font-medium mt-1 truncate">{(project as any).brandColors ? "Paleta definida" : "A definir"}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/45 border p-2">
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <MessageSquareText className="w-3 h-3" /> Tom
+                        </div>
+                        <p className="text-xs font-medium mt-1 truncate">{project.instructions ? "Orientado" : "A definir"}</p>
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2 mt-3 flex-wrap">
-                      <Button variant="outline" size="sm" asChild className="h-7 text-xs">
+                      <Button size="sm" asChild className="h-8 text-xs">
                         <Link href={`/projects/${project.id}`}>
                           Abrir projeto <ArrowRight className="w-3 h-3 ml-1" />
                         </Link>

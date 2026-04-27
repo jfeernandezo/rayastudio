@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, MessageSquare, Loader2, Image, AlertCircle } from "lucide-react";
-import type { ContentPiece, Project } from "@shared/schema";
+import type { ContentPiece, Project, ProductionPackage } from "@shared/schema";
 
 const platformLabels: Record<string, string> = { instagram: "Instagram", linkedin: "LinkedIn" };
 const formatLabels: Record<string, string> = { post: "Post", story: "Story", carrossel: "Carrossel", reels: "Reels" };
@@ -70,6 +70,7 @@ export default function ApprovePage() {
 
   const { content, project } = data;
   const brandColor = getBrandColor(project);
+  const productionPackage = (content as any).productionPackage as ProductionPackage | null | undefined;
 
   if (done === "approved") {
     return (
@@ -145,6 +146,21 @@ export default function ApprovePage() {
                 <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{content.caption}</p>
               </div>
             )}
+
+            {productionPackage?.slides?.length ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Estrutura</p>
+                <div className="space-y-2">
+                  {productionPackage.slides.map((slide) => (
+                    <div key={slide.number} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-xs font-semibold text-gray-500">Slide {slide.number} · {slide.role}</p>
+                      <p className="text-sm font-semibold text-gray-900 mt-1">{slide.headline}</p>
+                      {slide.body && <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{slide.body}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {content.hashtags && (
               <p className="text-sm text-blue-500 leading-relaxed">{content.hashtags}</p>

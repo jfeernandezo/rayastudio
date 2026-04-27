@@ -99,11 +99,11 @@ export class DatabaseStorage implements IStorage {
     return p;
   }
   async createProject(project: InsertProject) {
-    const [p] = await db.insert(projects).values(project).returning();
+    const [p] = await db.insert(projects).values(project as typeof projects.$inferInsert).returning();
     return p;
   }
   async updateProject(id: number, project: Partial<InsertProject>) {
-    const [p] = await db.update(projects).set(project).where(eq(projects.id, id)).returning();
+    const [p] = await db.update(projects).set(project as Partial<typeof projects.$inferInsert>).where(eq(projects.id, id)).returning();
     return p;
   }
   async deleteProject(id: number) {
@@ -140,11 +140,11 @@ export class DatabaseStorage implements IStorage {
     return p;
   }
   async createContentPiece(piece: InsertContentPiece) {
-    const [p] = await db.insert(contentPieces).values(piece).returning();
+    const [p] = await db.insert(contentPieces).values(piece as typeof contentPieces.$inferInsert).returning();
     return p;
   }
   async updateContentPiece(id: number, piece: Partial<InsertContentPiece>) {
-    const [p] = await db.update(contentPieces).set(piece).where(eq(contentPieces.id, id)).returning();
+    const [p] = await db.update(contentPieces).set(piece as Partial<typeof contentPieces.$inferInsert>).where(eq(contentPieces.id, id)).returning();
     return p;
   }
   async deleteContentPiece(id: number) {

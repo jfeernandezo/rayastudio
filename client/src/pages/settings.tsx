@@ -126,6 +126,7 @@ export default function Settings() {
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [metaAccounts, setMetaAccounts] = useState<any[]>([]);
 
   const { data: settings, isLoading: loadingSettings } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
@@ -189,6 +190,20 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/models"] });
       toast({ title: "Removido" });
     },
+  });
+
+  const testMetaMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/meta/accounts", { credentials: "include" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Falha ao validar Meta");
+      return body as { accounts: any[] };
+    },
+    onSuccess: (body) => {
+      setMetaAccounts(body.accounts || []);
+      toast({ title: `${body.accounts?.length || 0} conta(s) Meta encontrada(s)` });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
   const saveField = (key: string, onDone?: () => void) => {
@@ -480,8 +495,15 @@ export default function Settings() {
           ) : tab === "integracoes" ? (
             /* Integrações tab */
             <div className="space-y-6">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">Prioridade do MVP: Meta</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  O Raya deve ser autossuficiente na gestão de conteúdo. ClickUp/CRM fica como integração futura; a conexão operacional agora é com contas Instagram/Facebook via Meta.
+                </p>
+              </div>
+
               {/* ClickUp */}
-              <div className="space-y-3">
+              <div className="space-y-3 opacity-70">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className="w-7 h-7 rounded-lg border bg-white flex items-center justify-center shrink-0">
@@ -489,12 +511,10 @@ export default function Settings() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold">ClickUp</p>
-                      <ConnectionBadge connected={!!c[KEYS.clickupToken]} />
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">Futuro</span>
                     </div>
                   </div>
-                  <a href="https://app.clickup.com/settings/apps" target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1 transition-colors">
-                    Obter token <ExternalLink className="w-3 h-3" />
-                  </a>
+                  <span className="text-xs text-muted-foreground">Fora do MVP</span>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground">API Token pessoal</Label>
@@ -633,6 +653,32 @@ export default function Settings() {
                         <Save className="w-3.5 h-3.5 mr-1.5" />
                         {saveSettingsMutation.isPending ? "Salvando..." : "Salvar credenciais Meta"}
                       </Button>
+                    </div>
+                  )}
+                  {c[KEYS.metaSystemToken] && (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => testMetaMutation.mutate()}
+                          disabled={testMetaMutation.isPending}
+                          data-testid="button-test-meta"
+                        >
+                          {testMetaMutation.isPending && <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                          Testar conexão Meta
+                        </Button>
+                      </div>
+                      {metaAccounts.length > 0 && (
+                        <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                          <p className="text-xs font-semibold">Contas encontradas</p>
+                          {metaAccounts.map((account) => (
+                            <p key={account.id} className="text-xs text-muted-foreground font-mono">
+                              {account.username || account.name || account.id}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

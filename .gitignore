@@ -4,3 +4,15 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+.env
+.env.local
+tmp_hash.txt
+
+# Logs locais
+*.log
+dev-server.log
+dev-server.err.log
+dev-smoke.log
+
+# Uploads gerados em desenvolvimento
+uploads/

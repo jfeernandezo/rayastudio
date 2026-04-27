@@ -1,12 +1,16 @@
+import "./dns-fix";
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
 import { setupAuth } from "./auth";
+import { setupSecurity } from "./security";
 
 const app = express();
 const httpServer = createServer(app);
+setupSecurity(app);
 
 declare module "http" {
   interface IncomingMessage {
@@ -39,23 +43,11 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms`);
     }
   });
 
@@ -63,7 +55,17 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await seedDatabase().catch(console.error);
+  const { waitForDb } = await import("./db");
+  await waitForDb();
+  if (process.env.NODE_ENV === "production" && process.env.RUN_MIGRATIONS !== "false") {
+    const { runMigrations } = await import("./migrate");
+    await runMigrations();
+  }
+  if (process.env.NODE_ENV === "production") {
+    await seedDatabase();
+  } else {
+    await seedDatabase().catch(console.error);
+  }
   setupAuth(app);
   await registerRoutes(httpServer, app);
 
@@ -99,7 +101,6 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`serving on port ${port}`);

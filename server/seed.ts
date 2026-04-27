@@ -5,12 +5,19 @@ import { hashPassword } from "./auth";
 import { randomUUID } from "crypto";
 
 export async function seedDatabase() {
-  // Always ensure the primary user exists with the correct password
-  const hashed = await hashPassword("Adm#nexus26");
+  const adminUsername = process.env.ADMIN_USERNAME || "adm@v3nexus.com.br";
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (process.env.NODE_ENV === "production" && !adminPassword) {
+    throw new Error("ADMIN_PASSWORD precisa estar definido para sincronizar o usuário inicial em produção.");
+  }
+
+  const password = adminPassword || "raya-dev-password";
+  const hashed = await hashPassword(password);
   await db.insert(users)
-    .values([{ id: randomUUID(), username: "adm@v3nexus.com.br", password: hashed }])
+    .values([{ id: randomUUID(), username: adminUsername, password: hashed }])
     .onConflictDoUpdate({ target: users.username, set: { password: hashed } });
-  console.log("  Raya Studio — usuário principal sincronizado: adm@v3nexus.com.br");
+  console.log(`  Raya Studio — usuário principal sincronizado: ${adminUsername}`);
 
   const existingProjects = await db.select().from(projects);
   if (existingProjects.length > 0) return;

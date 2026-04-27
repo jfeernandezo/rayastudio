@@ -17,9 +17,9 @@
   --opaque-button-border-intensity: -6;
   --elevate-1: rgba(0,0,0, 0.03);
   --elevate-2: rgba(0,0,0, 0.06);
-  --background: 220 20% 96%;
+  --background: 35 24% 96%;
   --foreground: 222 20% 11%;
-  --border: 220 14% 89%;
+  --border: 30 14% 88%;
   --card: 0 0% 100%;
   --card-foreground: 222 20% 11%;
   --card-border: 220 14% 91%;
@@ -38,9 +38,9 @@
   --primary-foreground: 0 0% 100%;
   --secondary: 220 14% 94%;
   --secondary-foreground: 222 20% 11%;
-  --muted: 220 14% 94%;
-  --muted-foreground: 220 10% 48%;
-  --accent: 220 14% 93%;
+  --muted: 32 18% 93%;
+  --muted-foreground: 222 8% 45%;
+  --accent: 32 20% 92%;
   --accent-foreground: 222 20% 11%;
   --destructive: 0 84% 45%;
   --destructive-foreground: 0 0% 98%;
@@ -54,7 +54,7 @@
   --font-sans: Inter, system-ui, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: "JetBrains Mono", Menlo, monospace;
-  --radius: 0.875rem;
+  --radius: 0.75rem;
   --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.04);
   --shadow-xs: 0px 1px 3px 0px rgba(0, 0, 0, 0.06), 0px 1px 2px -1px rgba(0, 0, 0, 0.04);
   --shadow-sm: 0px 2px 6px 0px rgba(0, 0, 0, 0.06), 0px 1px 3px -1px rgba(0, 0, 0, 0.04);
@@ -158,6 +158,8 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    background:
+      linear-gradient(180deg, hsl(35 28% 98%) 0%, hsl(var(--background)) 42%, hsl(30 20% 93%) 100%);
   }
 
   ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -221,6 +223,103 @@
   .animate-float     { animation: float-gentle 3s ease-in-out infinite; }
   .animate-glow-pulse { animation: glow-pulse 2.5s ease-in-out infinite; }
 
+  .app-surface {
+    background:
+      linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--muted) / 0.56) 100%);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-xs);
+  }
+
+  .page-shell {
+    width: min(1180px, calc(100vw - 32px));
+    margin-inline: auto;
+    padding-block: 24px;
+  }
+
+  .page-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .page-title {
+    font-size: 1.35rem;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  .page-subtitle {
+    margin-top: 4px;
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .metric-tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    box-shadow: var(--shadow-xs);
+  }
+
+  .metric-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-top: 3px solid hsl(var(--primary) / 0.75);
+    pointer-events: none;
+  }
+
+  .interactive-row {
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    border-radius: 12px;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .interactive-row:hover {
+    transform: translateY(-1px);
+    border-color: hsl(var(--primary) / 0.38);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .workflow-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .workflow-step-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+  }
+
+  .workflow-step[data-active="true"] {
+    color: hsl(var(--foreground));
+  }
+
+  .workflow-step[data-active="true"] .workflow-step-dot {
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.13);
+  }
+
+
+
   /* ── Liquid Glass ── */
   .glass {
     background: rgba(255, 255, 255, 0.68);
@@ -230,7 +329,7 @@
   }
 
   .glass-strong {
-    background: rgba(255, 255, 255, 0.88);
+    background: rgba(255, 255, 255, 0.82);
     backdrop-filter: blur(24px) saturate(200%);
     -webkit-backdrop-filter: blur(24px) saturate(200%);
     border: 1px solid rgba(255, 255, 255, 0.65);
@@ -302,7 +401,7 @@
 
   /* ── Sidebar active card ── */
   .sidebar-active-card {
-    background: white;
+    background: linear-gradient(135deg, white 0%, hsl(var(--muted)) 100%);
     box-shadow:
       0 1px 3px rgba(0, 0, 0, 0.08),
       0 0 0 1px rgba(0, 0, 0, 0.05),

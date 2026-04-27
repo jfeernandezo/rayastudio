@@ -28,6 +28,27 @@ export type DesignBrief = {
   additionalNotes?: string;
 };
 
+export type ProductionSlide = {
+  number: number;
+  role: string;
+  headline: string;
+  body: string;
+  visualDirection: string;
+};
+
+export type ProductionPackage = {
+  diagnosis?: string;
+  recommendedAngle?: string;
+  mainTitle?: string;
+  slides?: ProductionSlide[];
+  caption?: string;
+  hashtags?: string;
+  ctaOptions?: string[];
+  visualDirection?: string;
+  reviewChecklist?: string[];
+  imagePrompt?: string;
+};
+
 export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -77,6 +98,10 @@ export const contentPieces = pgTable("content_pieces", {
   status: text("status").notNull().default("draft"),
   imageUrl: text("image_url"),
   imagePrompt: text("image_prompt"),
+  briefing: text("briefing"),
+  productionPackage: jsonb("production_package").$type<ProductionPackage | null>().default(null),
+  visualDirection: text("visual_direction"),
+  reviewChecklist: text("review_checklist").array().default([]),
   scheduledDate: text("scheduled_date"),
   notes: text("notes"),
   clickupTaskId: text("clickup_task_id"),

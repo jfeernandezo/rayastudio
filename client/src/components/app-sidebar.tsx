@@ -63,26 +63,27 @@ export function AppSidebar({ username }: { username: string }) {
     url === "/" ? location === "/" : location.startsWith(url);
 
   return (
-    <Sidebar className="border-r border-sidebar-border bg-white dark:bg-sidebar">
-      <SidebarHeader className="px-4 pt-5 pb-4">
-        <div className="flex items-center gap-3">
+    <Sidebar className="border-r border-sidebar-border bg-white/86 dark:bg-sidebar backdrop-blur-xl">
+      <SidebarHeader className="px-4 pt-5 pb-3">
+        <div className="flex items-center gap-3 p-2 rounded-2xl bg-muted/45 border border-border/70">
           <button
             onClick={() => fileRef.current?.click()}
-            className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden shrink-0 transition-opacity hover:opacity-80 border border-border bg-white dark:bg-white"
+            className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0 transition-opacity hover:opacity-80 border border-border bg-white dark:bg-white shadow-xs"
             title="Clique para trocar a logo"
             data-testid="button-upload-logo"
           >
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
             <img src={logo ?? rayaLogo} alt="Raya Studio" className="w-full h-full object-contain p-0.5" />
           </button>
-          <div className="leading-tight">
+          <div className="leading-tight min-w-0">
             <p style={{ fontFamily: "'Brume', sans-serif" }} className="text-[15px] text-foreground tracking-wide">Raya Studio</p>
-            <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Explore sua Criatividade</p>
+            <p className="text-[10px] text-muted-foreground leading-none mt-1">Sistema de produção</p>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-3 py-1">
+      <SidebarContent className="px-3 py-2">
+        <p className="px-3 pb-2 text-[10px] font-semibold uppercase text-muted-foreground/70">Operação</p>
         <SidebarGroup className="p-0">
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
@@ -92,7 +93,7 @@ export function AppSidebar({ username }: { username: string }) {
                   <SidebarMenuItem key={item.title}>
                     <Link href={item.url}>
                       <div
-                        className={`flex items-center gap-2.5 px-3 h-9 rounded-xl cursor-pointer select-none
+                        className={`flex items-center gap-2.5 px-3 h-10 rounded-xl cursor-pointer select-none
                           transition-all duration-200 ease-out group
                           ${active
                             ? "sidebar-active-card text-foreground font-semibold"
@@ -104,9 +105,9 @@ export function AppSidebar({ username }: { username: string }) {
                           className={`w-4 h-4 shrink-0 transition-colors duration-200
                             ${active ? "text-primary" : "group-hover:text-foreground"}`}
                         />
-                        <span className="text-[13px] leading-none flex-1">{item.title}</span>
+                        <span className="text-[13px] leading-none flex-1 truncate">{item.title}</span>
                         {active && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 animate-pulse" />
+                          <span className="w-1.5 h-5 rounded-full bg-primary shrink-0" />
                         )}
                       </div>
                     </Link>
@@ -127,7 +128,7 @@ export function AppSidebar({ username }: { username: string }) {
               <SidebarMenuItem key={item.title}>
                 <Link href={item.url}>
                   <div
-                    className={`flex items-center gap-2.5 px-3 h-9 rounded-xl cursor-pointer select-none
+                    className={`flex items-center gap-2.5 px-3 h-10 rounded-xl cursor-pointer select-none
                       transition-all duration-200 ease-out group
                       ${active
                         ? "sidebar-active-card text-foreground font-semibold"
@@ -165,7 +166,7 @@ export function AppSidebar({ username }: { username: string }) {
         </div>
 
         <div className="px-2 pt-2">
-          <p className="text-[10px] text-muted-foreground/35">v1.0 · Raya Studio</p>
+          <p className="text-[10px] text-muted-foreground/45">v1.0 · Raya Studio</p>
         </div>
       </SidebarFooter>
     </Sidebar>

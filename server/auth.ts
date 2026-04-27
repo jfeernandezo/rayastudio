@@ -26,6 +26,11 @@ export async function comparePasswords(supplied: string, stored: string): Promis
 
 export function setupAuth(app: Express) {
   const PgSession = connectPgSimple(session);
+  const sessionSecret = process.env.SESSION_SECRET;
+
+  if (process.env.NODE_ENV === "production" && !sessionSecret) {
+    throw new Error("SESSION_SECRET precisa estar definido em produção.");
+  }
 
   app.set("trust proxy", 1);
 
@@ -36,7 +41,7 @@ export function setupAuth(app: Express) {
         tableName: "user_sessions",
         createTableIfMissing: true,
       }),
-      secret: process.env.SESSION_SECRET || "raya-dev-secret-change-in-production",
+      secret: sessionSecret || "raya-dev-secret-change-in-production",
       resave: false,
       saveUninitialized: false,
       cookie: {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
   ArrowLeft, Sparkles, Image, Loader2, Save, CheckCircle, Wand2, RefreshCw,
   BookOpen, Zap, ImageIcon, Layers, Palette, Download, AlertCircle, Link2, Send, Cpu
 } from "lucide-react";
-import type { Project, ContentPiece, Template, KnowledgeBase, Prompt, AgentProfile } from "@shared/schema";
+import type { Project, ContentPiece, Template, KnowledgeBase, Prompt, AgentProfile, ProductionPackage } from "@shared/schema";
 
 const statusOptions = [
   { value: "draft",     label: "À Fazer" },
@@ -69,6 +69,7 @@ function downloadImage(src: string, format: "png" | "jpg", width: number, height
 
 export default function ContentCreator() {
   const { id, contentId } = useParams<{ id: string; contentId: string }>();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
 
   const [aiTopic, setAiTopic] = useState("");
@@ -135,16 +136,36 @@ export default function ContentCreator() {
   const selectedDesignAgentObj = designAgents.find(a => a.id === Number(selectedDesignAgent));
   const selectedTemplateObj = templates.find(t => t.id === Number(selectedTemplate));
   const templateSlideCount = (selectedTemplateObj as any)?.slideCount as number | null | undefined;
+  const productionPackage = (form as any).productionPackage as ProductionPackage | null | undefined;
 
   const platform = form.platform || "instagram";
   const platformSizes = PLATFORM_SIZES[platform] || PLATFORM_SIZES.instagram;
   const exportSize = platformSizes[Math.min(exportSizeIdx, platformSizes.length - 1)];
 
-  const saveMutation = useMutation({
-    mutationFn: (overrides?: Partial<ContentPiece>) =>
-      apiRequest("PATCH", `/api/content/${contentId}`, { ...form, ...overrides }),
-    onSuccess: () => {
+  const saveMutation = useMutation<ContentPiece, Error, Partial<ContentPiece> | undefined>({
+    mutationFn: async (overrides) => {
+      const payload = {
+        projectId: Number(id),
+        title: form.title?.trim() || "Sem título",
+        platform: form.platform || "instagram",
+        format: form.format || "post",
+        status: form.status || "draft",
+        ...form,
+        ...overrides,
+      };
+      const res = await apiRequest(
+        contentId ? "PATCH" : "POST",
+        contentId ? `/api/content/${contentId}` : "/api/content",
+        payload,
+      );
+      return res.json() as Promise<ContentPiece>;
+    },
+    onSuccess: (savedContent) => {
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id] });
+      if (!contentId) {
+        navigate(`/projects/${id}/content/${savedContent.id}`);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     },
@@ -152,8 +173,10 @@ export default function ContentCreator() {
   });
 
   const shareMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/content/${contentId}/share`, { method: "POST" });
+    mutationFn: async (targetContentId?: number) => {
+      const shareContentId = targetContentId ?? Number(contentId);
+      if (!shareContentId) throw new Error("Conteúdo ainda não foi salvo");
+      const res = await fetch(`/api/content/${shareContentId}/share`, { method: "POST" });
       if (!res.ok) throw new Error("Erro");
       return res.json() as Promise<{ token: string }>;
     },
@@ -166,14 +189,28 @@ export default function ContentCreator() {
   });
 
   const handleSaveAndReview = async () => {
-    await saveMutation.mutateAsync({ status: "review" });
+    const savedContent = await saveMutation.mutateAsync({ status: "review" });
     setForm(prev => ({ ...prev, status: "review" }));
-    const res = await shareMutation.mutateAsync();
+    await shareMutation.mutateAsync(savedContent.id);
     setShareDialogOpen(true);
   };
 
   const updateField = (field: keyof ContentPiece, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const applyProductionPackage = (data: ProductionPackage) => {
+    setForm(prev => ({
+      ...prev,
+      productionPackage: data,
+      briefing: aiTopic || (prev as any).briefing || prev.title || "",
+      title: prev.title || data.mainTitle || "Conteúdo sem título",
+      caption: data.caption || prev.caption,
+      hashtags: data.hashtags || prev.hashtags,
+      imagePrompt: data.imagePrompt || prev.imagePrompt,
+      visualDirection: data.visualDirection || (prev as any).visualDirection,
+      reviewChecklist: data.reviewChecklist || (prev as any).reviewChecklist,
+    } as Partial<ContentPiece>));
   };
 
   const handleTemplateChange = (value: string) => {
@@ -190,7 +227,7 @@ export default function ContentCreator() {
       const knowledgeContext = knowledge.map(k => `${k.title}: ${k.content}`).join("\n");
       const isCarousel = (form.format === "carrossel") || (template?.format === "carrossel");
       const slideCount = templateSlideCount;
-      const res = await fetch("/api/ai/caption", {
+      const res = await fetch("/api/ai/content-package", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -199,18 +236,19 @@ export default function ContentCreator() {
           format: form.format,
           template: template?.captionTemplate,
           topic: aiTopic || form.title,
+          briefing: aiTopic || (form as any).briefing || form.notes || form.title,
           tone: aiTone,
           knowledgeContext,
           provider: aiProvider,
           model: aiModel,
+          designBrief: (project as any)?.designBrief,
+          designAgent: selectedDesignAgentObj,
           ...(isCarousel && slideCount ? { carouselSlides: slideCount } : {}),
         }),
       });
       const data = await res.json();
-      if (data.caption) updateField("caption", data.caption);
-      if (data.hashtags) updateField("hashtags", data.hashtags);
-      if (data.imagePrompt && !form.imagePrompt) updateField("imagePrompt", data.imagePrompt);
-      toast({ title: "Legenda gerada!" });
+      applyProductionPackage(data);
+      toast({ title: "Pacote de conteúdo gerado!" });
     } catch (e) {
       toast({ title: "Erro ao gerar legenda", variant: "destructive" });
     } finally {
@@ -250,11 +288,11 @@ export default function ContentCreator() {
         }),
       });
       const data = await res.json();
-      if (data.b64_json) {
-        const mime = data.mimeType || "image/png";
-        const imageUrl = `data:${mime};base64,${data.b64_json}`;
-        updateField("imageUrl", imageUrl);
+      if (data.url) {
+        updateField("imageUrl", data.url);
         toast({ title: "Imagem gerada!" });
+      } else if (data.error) {
+        throw new Error(data.error);
       }
     } catch (e) {
       toast({ title: "Erro ao gerar imagem", variant: "destructive" });
@@ -270,26 +308,27 @@ export default function ContentCreator() {
       const knowledgeContext = knowledge.map(k => `${k.title}: ${k.content}`).join("\n");
       const isCarousel = (form.format === "carrossel") || (template?.format === "carrossel");
       const slideCount = templateSlideCount;
-      const captionRes = await fetch("/api/ai/caption", {
+      const captionRes = await fetch("/api/ai/content-package", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectContext: `${project?.name}. ${project?.instructions || ""}. ${project?.description || ""}`,
           platform: form.platform,
-          format: form.format,
-          template: template?.captionTemplate,
-          topic: aiTopic || form.title,
-          tone: aiTone,
-          knowledgeContext,
-          provider: aiProvider,
-          model: aiModel,
-          ...(isCarousel && slideCount ? { carouselSlides: slideCount } : {}),
-        }),
-      });
+            format: form.format,
+            template: template?.captionTemplate,
+            topic: aiTopic || form.title,
+            briefing: aiTopic || (form as any).briefing || form.notes || form.title,
+            tone: aiTone,
+            knowledgeContext,
+            provider: aiProvider,
+            model: aiModel,
+            designBrief: (project as any)?.designBrief,
+            designAgent: selectedDesignAgentObj,
+            ...(isCarousel && slideCount ? { carouselSlides: slideCount } : {}),
+          }),
+        });
       const captionData = await captionRes.json();
-      if (captionData.caption) updateField("caption", captionData.caption);
-      if (captionData.hashtags) updateField("hashtags", captionData.hashtags);
-      if (captionData.imagePrompt && !form.imagePrompt) updateField("imagePrompt", captionData.imagePrompt);
+      applyProductionPackage(captionData);
 
       const imagePromptToUse = form.imagePrompt || captionData.imagePrompt;
       setGeneratingCaption(false);
@@ -322,9 +361,8 @@ export default function ContentCreator() {
             }),
           });
           const imageData = await imageRes.json();
-          if (imageData.b64_json) {
-            const mime = imageData.mimeType || "image/png";
-            updateField("imageUrl", `data:${mime};base64,${imageData.b64_json}`);
+          if (imageData.url) {
+            updateField("imageUrl", imageData.url);
             toast({ title: "Publicação gerada!", description: "Legenda e imagem criadas com sucesso." });
           } else if (imageData.error) {
             toast({ title: "Legenda gerada", description: `Imagem falhou: ${imageData.error}`, variant: "destructive" });
@@ -361,7 +399,7 @@ export default function ContentCreator() {
   const hasRevision = !!content?.approvalComment && content?.status === "review";
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-5">
+    <div className="page-shell space-y-5">
 
       {/* ── Revision request banner ── */}
       {hasRevision && (
@@ -377,6 +415,7 @@ export default function ContentCreator() {
       )}
 
       {/* ── Header row ── */}
+      <div className="app-surface rounded-2xl p-4">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild className="w-8 h-8">
           <Link href={`/projects/${id}`}><ArrowLeft className="w-4 h-4" /></Link>
@@ -401,7 +440,7 @@ export default function ContentCreator() {
         </Select>
 
         {/* Save and send for review */}
-        {contentId && (
+        {(contentId || saved) && (
           <Button
             size="sm"
             variant="outline"
@@ -421,7 +460,7 @@ export default function ContentCreator() {
 
         <Button
           size="sm"
-          onClick={() => saveMutation.mutate()}
+          onClick={() => saveMutation.mutate(undefined)}
           disabled={saveMutation.isPending}
           data-testid="button-save-content"
         >
@@ -434,8 +473,24 @@ export default function ContentCreator() {
         </Button>
       </div>
 
+      <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-2">
+        {[
+          { label: "Briefing", active: !!((form as any).briefing || aiTopic) },
+          { label: "Estrutura", active: !!productionPackage?.slides?.length },
+          { label: "Copy", active: !!form.caption },
+          { label: "Visual", active: !!((form as any).visualDirection || form.imagePrompt) },
+          { label: "Aprovação", active: form.status === "review" || form.status === "approved" },
+        ].map((step, index) => (
+          <div key={step.label} className="workflow-step rounded-xl border bg-background/65 px-3 py-2" data-active={step.active}>
+            <span className="workflow-step-dot">{index + 1}</span>
+            <span className="text-xs font-medium truncate">{step.label}</span>
+          </div>
+        ))}
+      </div>
+      </div>
+
       {/* ── Platform / Format row ── */}
-      <div className="grid md:grid-cols-2 gap-2 text-sm">
+      <div className="grid md:grid-cols-2 gap-2 text-sm rounded-2xl border bg-card p-3">
         <div className="flex items-center gap-2">
           <Label className="text-xs w-20 shrink-0">Plataforma</Label>
           <Select value={form.platform || "instagram"} onValueChange={(v) => { updateField("platform", v); setExportSizeIdx(0); }}>
@@ -460,14 +515,85 @@ export default function ContentCreator() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-[1.05fr_0.95fr] gap-6">
         {/* ── LEFT: Caption / AI ── */}
         <div className="space-y-4">
-          <Tabs defaultValue="caption">
-            <TabsList className="w-full">
-              <TabsTrigger value="caption" className="flex-1">Legenda</TabsTrigger>
-              <TabsTrigger value="ai" className="flex-1">Gerador IA</TabsTrigger>
+          <Tabs defaultValue="briefing">
+            <TabsList className="w-full grid grid-cols-5 h-auto rounded-xl bg-muted/70 p-1">
+              <TabsTrigger value="briefing">Briefing</TabsTrigger>
+              <TabsTrigger value="structure">Estrutura</TabsTrigger>
+              <TabsTrigger value="caption">Copy</TabsTrigger>
+              <TabsTrigger value="visual">Visual</TabsTrigger>
+              <TabsTrigger value="ai">IA</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="briefing" className="space-y-3 mt-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Briefing da demanda</Label>
+                <Textarea
+                  value={(form as any).briefing || aiTopic || ""}
+                  onChange={(e) => {
+                    updateField("briefing" as keyof ContentPiece, e.target.value);
+                    setAiTopic(e.target.value);
+                  }}
+                  placeholder="Tema, objetivo, público, promessa, oferta, referências, restrições e qualquer informação obrigatória."
+                  rows={8}
+                  className="resize-none"
+                  data-testid="input-production-briefing"
+                />
+              </div>
+              {productionPackage?.diagnosis && (
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Diagnóstico</p>
+                    <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{productionPackage.diagnosis}</p>
+                  </div>
+                  {productionPackage.recommendedAngle && (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Ângulo recomendado</p>
+                      <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{productionPackage.recommendedAngle}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="structure" className="space-y-3 mt-3">
+              {productionPackage?.slides?.length ? (
+                <div className="space-y-2">
+                  {productionPackage.slides.map((slide) => (
+                    <div key={slide.number} className="rounded-lg border bg-card p-3 space-y-1" data-testid={`slide-structure-${slide.number}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary">Slide {slide.number}</span>
+                        <span className="text-[11px] text-muted-foreground">{slide.role}</span>
+                      </div>
+                      <Input
+                        value={slide.headline || ""}
+                        onChange={(e) => {
+                          const next = productionPackage.slides?.map(s => s.number === slide.number ? { ...s, headline: e.target.value } : s) || [];
+                          updateField("productionPackage" as keyof ContentPiece, { ...productionPackage, slides: next });
+                        }}
+                        className="h-8 text-xs font-semibold"
+                      />
+                      <Textarea
+                        value={slide.body || ""}
+                        onChange={(e) => {
+                          const next = productionPackage.slides?.map(s => s.number === slide.number ? { ...s, body: e.target.value } : s) || [];
+                          updateField("productionPackage" as keyof ContentPiece, { ...productionPackage, slides: next });
+                        }}
+                        rows={2}
+                        className="resize-none text-xs"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="border border-dashed rounded-xl p-6 text-center">
+                  <Layers className="w-7 h-7 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Gere o pacote com IA para receber a estrutura slide a slide.</p>
+                </div>
+              )}
+            </TabsContent>
 
             <TabsContent value="caption" className="space-y-3 mt-3">
               <div className="space-y-1">
@@ -497,6 +623,50 @@ export default function ContentCreator() {
               <div className="space-y-1">
                 <Label className="text-xs">Notas Internas</Label>
                 <Textarea value={form.notes || ""} onChange={(e) => updateField("notes", e.target.value)} placeholder="Notas para a equipe..." rows={2} className="resize-none" />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="visual" className="space-y-3 mt-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Direção visual geral</Label>
+                <Textarea
+                  value={(form as any).visualDirection || productionPackage?.visualDirection || ""}
+                  onChange={(e) => updateField("visualDirection" as keyof ContentPiece, e.target.value)}
+                  placeholder="Layout, hierarquia, paleta, tipografia, imagem, composição e restrições para o designer."
+                  rows={5}
+                  className="resize-none"
+                  data-testid="input-visual-direction"
+                />
+              </div>
+              {productionPackage?.slides?.length && (
+                <div className="space-y-2">
+                  <Label className="text-xs">Direção por slide</Label>
+                  {productionPackage.slides.map((slide) => (
+                    <div key={slide.number} className="rounded-lg border bg-muted/20 p-2">
+                      <p className="text-[11px] font-semibold text-foreground mb-1">Slide {slide.number}</p>
+                      <Textarea
+                        value={slide.visualDirection || ""}
+                        onChange={(e) => {
+                          const next = productionPackage.slides?.map(s => s.number === slide.number ? { ...s, visualDirection: e.target.value } : s) || [];
+                          updateField("productionPackage" as keyof ContentPiece, { ...productionPackage, slides: next });
+                        }}
+                        rows={2}
+                        className="resize-none text-xs"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label className="text-xs">Checklist de revisão</Label>
+                <Textarea
+                  value={((form as any).reviewChecklist || productionPackage?.reviewChecklist || []).join("\n")}
+                  onChange={(e) => updateField("reviewChecklist" as keyof ContentPiece, e.target.value.split("\n").filter(Boolean))}
+                  placeholder="Um item por linha."
+                  rows={5}
+                  className="resize-none"
+                  data-testid="input-review-checklist"
+                />
               </div>
             </TabsContent>
 

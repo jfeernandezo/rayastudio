@@ -12,6 +12,7 @@ import fs from "fs";
 import express from "express";
 import passport from "passport";
 import { requireAuth, hashPassword, comparePasswords } from "./auth";
+import { LOCAL_ASSETS_DIR, storeGeneratedImage } from "./asset-storage";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -20,7 +21,7 @@ fs.mkdirSync(FONTS_DIR, { recursive: true });
 
 const fontStorage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const dir = path.join(FONTS_DIR, req.params.id);
+    const dir = path.join(FONTS_DIR, String(req.params.id));
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -113,6 +114,10 @@ async function generateTextContent({
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
 
   app.use("/uploads/fonts", express.static(FONTS_DIR));
+  app.use("/uploads/generated", express.static(LOCAL_ASSETS_DIR, {
+    maxAge: "1y",
+    immutable: true,
+  }));
 
   // ── AUTH ROUTES (public) ──────────────────────────────────────────────────
 
@@ -539,48 +544,84 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(result);
   });
 
-  // --- AI: GENERATE CAPTION ---
-  app.post("/api/ai/caption", async (req, res) => {
+  // --- AI: GENERATE STRUCTURED CONTENT PACKAGE ---
+  app.post("/api/ai/content-package", async (req, res) => {
     try {
       const {
         projectContext, platform, format, template, topic, tone,
-        knowledgeContext, carouselSlides,
+        knowledgeContext, carouselSlides, briefing, designBrief, agentProfile, designAgent,
         provider = "openai", model = "gpt-4.1",
       } = req.body;
 
       const isCarousel = format === "carrossel" || (carouselSlides && carouselSlides > 1);
+      const slideCount = Number(carouselSlides || (isCarousel ? 5 : 1));
 
-      const systemPrompt = `Você é um especialista em marketing digital e criação de conteúdo para redes sociais.
-Crie conteúdo em português brasileiro, direto, autêntico e envolvente.
+      const systemPrompt = `Você é uma dupla sênior de Social Media e Designer dentro de uma esteira operacional de produção de conteúdo.
+Seu trabalho é substituir o processo manual: interpretar briefing, definir estratégia, estruturar carrossel/post, escrever copy, orientar direção visual e preparar checklist de revisão.
+Crie conteúdo em português brasileiro, direto, autêntico, vendável sem soar genérico e coerente com a marca.
 ${projectContext ? `Contexto do projeto: ${projectContext}` : ""}
-${knowledgeContext ? `Base de conhecimento: ${knowledgeContext}` : ""}`;
+${knowledgeContext ? `Base de conhecimento: ${knowledgeContext}` : ""}
+${agentProfile ? `Agente de estratégia/copy: ${JSON.stringify(agentProfile)}` : ""}
+${designAgent ? `Agente de design: ${JSON.stringify(designAgent)}` : ""}
+${designBrief ? `Briefing visual da marca: ${JSON.stringify(designBrief)}` : ""}`;
 
       const carouselInstructions = isCarousel && carouselSlides
-        ? `\nEste é um CARROSSEL com ${carouselSlides} slides. A legenda deve:
-1. Ter um HOOK forte na primeira linha (para parar o scroll)
-2. Convidar a deslizar ("Deslize para ver →" ou variação)
-3. Resumir brevemente o que o usuário vai aprender/ver em cada slide
-4. Terminar com CTA claro (comentário, salvar, seguir, etc.)
-Se um template foi fornecido, siga a estrutura de slides indicada nele.`
+        ? `\nEste é um CARROSSEL com ${slideCount} slides. Crie copy slide a slide, incluindo papel do slide, headline, corpo curto e direção visual específica.`
         : "";
 
-      const userPrompt = `Crie uma legenda para ${platform === "instagram" ? "Instagram" : "LinkedIn"}
+      const userPrompt = `Crie um pacote completo de produção para ${platform === "instagram" ? "Instagram" : "LinkedIn"}.
 Formato: ${isCarousel ? `Carrossel (${carouselSlides || "múltiplos"} slides)` : format}
-Tópico: ${topic}
+Briefing/demanda: ${briefing || topic}
 Tom: ${tone || "profissional e engajante"}
 ${template ? `Use este template como base: ${template}` : ""}
 ${carouselInstructions}
 
-Retorne um JSON com:
-- caption: a legenda completa (com estrutura de carrossel se aplicável)
-- hashtags: string com hashtags relevantes
-- imagePrompt: descrição em inglês para gerar o slide 1 do carrossel${isCarousel ? " (slide de capa, deve ser o mais atrativo visualmente)" : " ou imagem complementar"}`;
+Retorne SOMENTE JSON válido neste formato:
+{
+  "diagnosis": "leitura estratégica curta do briefing",
+  "recommendedAngle": "ângulo de comunicação escolhido e por quê",
+  "mainTitle": "título/gancho principal",
+  "slides": [
+    { "number": 1, "role": "capa", "headline": "...", "body": "...", "visualDirection": "..." }
+  ],
+  "caption": "legenda completa com hook, desenvolvimento e CTA",
+  "hashtags": "#hashtags relevantes",
+  "ctaOptions": ["opção 1", "opção 2", "opção 3"],
+  "visualDirection": "direção visual geral da peça: layout, paleta, hierarquia, tipografia, imagem, restrições",
+  "reviewChecklist": ["checagem estratégica", "checagem de copy", "checagem visual", "checagem de marca", "checagem de publicação"],
+  "imagePrompt": "prompt em inglês para gerar a arte ou capa do slide 1"
+}
 
-      const text = await generateTextContent({ provider, model, systemPrompt, userPrompt, jsonMode: true, maxTokens: 2000 });
+Se for carrossel, o array slides deve ter exatamente ${slideCount} itens. Se não for carrossel, retorne 1 item representando a peça.`;
+
+      const text = await generateTextContent({ provider, model, systemPrompt, userPrompt, jsonMode: true, maxTokens: 4000 });
       const result = JSON.parse(text);
       res.json(result);
     } catch (e: any) {
       console.error("Caption generation error:", e);
+      res.status(500).json({ error: e.message || "Failed to generate caption" });
+    }
+  });
+
+  // Backward-compatible caption endpoint.
+  app.post("/api/ai/caption", async (req, res) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:${process.env.PORT || "5000"}/api/ai/content-package`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: req.headers.cookie || "",
+        },
+        body: JSON.stringify(req.body),
+      });
+      const data = await response.json();
+      res.status(response.status).json({
+        caption: data.caption,
+        hashtags: data.hashtags,
+        imagePrompt: data.imagePrompt,
+        productionPackage: data,
+      });
+    } catch (e: any) {
       res.status(500).json({ error: e.message || "Failed to generate caption" });
     }
   });
@@ -647,7 +688,8 @@ Retorne um JSON com:
         const parts = result.response.candidates?.[0]?.content?.parts || [];
         for (const part of parts as any[]) {
           if (part.inlineData) {
-            return res.json({ b64_json: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" });
+            const stored = await storeGeneratedImage(part.inlineData.data, part.inlineData.mimeType || "image/png");
+            return res.json({ url: stored.url, key: stored.key, storage: stored.storage });
           }
         }
         throw new Error("Gemini não retornou imagem. Tente novamente ou verifique o prompt.");
@@ -662,8 +704,13 @@ Retorne um JSON com:
         size: "1024x1024",
       });
 
-      const imageData = response.data[0];
-      res.json({ b64_json: imageData.b64_json, url: imageData.url });
+      const imageData = response.data?.[0];
+      if (!imageData) throw new Error("OpenAI não retornou dados da imagem.");
+      if (imageData.b64_json) {
+        const stored = await storeGeneratedImage(imageData.b64_json, "image/png");
+        return res.json({ url: stored.url, key: stored.key, storage: stored.storage });
+      }
+      res.json({ url: imageData.url });
     } catch (e: any) {
       console.error("Image generation error:", e);
       res.status(500).json({ error: e.message || "Failed to generate image" });
@@ -905,6 +952,38 @@ Retorne um JSON com array "posts" onde cada post tem:
       await storage.setSetting(req.params.key, null);
       res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: "Failed to delete setting" }); }
+  });
+
+  // --- META CONNECTION ---
+  app.get("/api/meta/accounts", async (_req, res) => {
+    try {
+      const token = await storage.getSetting("meta_system_user_token");
+      const portfolioId = await storage.getSetting("meta_business_portfolio_id");
+      if (!token) return res.status(400).json({ error: "Token Meta não configurado" });
+
+      const version = process.env.META_GRAPH_VERSION || "v23.0";
+      const fields = "id,name,username,profile_picture_url";
+      const targets = portfolioId
+        ? [`${portfolioId}/owned_instagram_accounts?fields=${fields}`]
+        : [`me/accounts?fields=id,name,instagram_business_account{${fields}}`];
+
+      const results: any[] = [];
+      for (const target of targets) {
+        const url = new URL(`https://graph.facebook.com/${version}/${target}`);
+        url.searchParams.set("access_token", token);
+        const response = await fetch(url);
+        const body = await response.json();
+        if (!response.ok) {
+          return res.status(response.status).json({ error: body.error?.message || "Falha ao consultar Meta", details: body.error });
+        }
+        results.push(...(body.data || []));
+      }
+
+      const accounts = results.map((item) => item.instagram_business_account || item).filter(Boolean);
+      res.json({ accounts, source: portfolioId ? "business_portfolio" : "pages" });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Erro ao conectar com a Meta" });
+    }
   });
 
   return httpServer;

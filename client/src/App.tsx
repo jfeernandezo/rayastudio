@@ -91,11 +91,15 @@ function AppLayout({ username }: { username: string }) {
         <div className="flex flex-col flex-1 min-w-0">
 
           {/* ── Liquid glass header ── */}
-          <header className="flex items-center gap-3 px-4 h-12 shrink-0 glass-strong border-b border-white/60 dark:border-white/10 sticky top-0 z-30">
+          <header className="flex items-center gap-3 px-4 h-14 shrink-0 glass-strong border-b border-white/60 dark:border-white/10 sticky top-0 z-30">
             <SidebarTrigger
               data-testid="button-sidebar-toggle"
               className="w-8 h-8 rounded-xl text-muted-foreground hover:text-foreground hover:bg-black/[0.05] dark:hover:bg-white/[0.06] transition-all duration-200 flex items-center justify-center shrink-0"
             />
+            <div className="hidden md:flex flex-col leading-tight">
+              <span className="text-[11px] text-muted-foreground">Raya Studio</span>
+              <span className="text-sm font-semibold text-foreground">Esteira de produção de conteúdo</span>
+            </div>
             <div className="flex-1" />
             <div className="flex items-center gap-2">
               <NotificationBell />
